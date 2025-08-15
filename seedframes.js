@@ -1114,7 +1114,7 @@ class Collider extends Component {
 }
 
 class Rigidbody extends Component {
-  constructor(mass = 1.0, gravityScale = 1.0) {
+  constructor(mass = 1.0, gravityScale = 1.0, bodyType = 'dynamic') {
     super();
     this.mass = mass;
     this.gravityScale = gravityScale;
@@ -1125,20 +1125,54 @@ class Rigidbody extends Component {
     this.gravity = new Vector2(0, 9.8 * gravityScale);
     this.useGravity = true;
     this.isKinematic = false;
+    
+    // Body types: 'static', 'kinematic', 'dynamic'
+    this.bodyType = bodyType;
+    this.setBodyType(bodyType);
+  }
+  
+  setBodyType(type) {
+    this.bodyType = type;
+    switch (type) {
+      case 'static':
+        this.isKinematic = true;
+        this.useGravity = false;
+        this.mass = Infinity;
+        this.velocity = new Vector2(0, 0);
+        break;
+      case 'kinematic':
+        this.isKinematic = true;
+        this.useGravity = false;
+        this.mass = Infinity;
+        break;
+      case 'dynamic':
+        this.isKinematic = false;
+        this.useGravity = true;
+        this.mass = Math.max(0.1, this.mass);
+        break;
+    }
   }
 
   addForce(force) {
+    // Static bodies cannot have forces applied to them
+    if (this.bodyType === 'static' || this.mass === Infinity) return;
     this.force = this.force.add(force);
   }
 
   setVelocity(velocity) {
+    // Static bodies cannot have velocity changed
+    if (this.bodyType === 'static') return;
     this.velocity = velocity;
     this.currentSpeed = velocity.magnitude();
     this.targetSpeed = this.currentSpeed;
   }
 
   update(deltaTime) {
-    if (this.isKinematic) return;
+    // Static and kinematic bodies don't update via physics
+    if (this.isKinematic || this.bodyType === 'static') return;
+
+    // Prevent infinite mass objects from moving
+    if (this.mass === Infinity || this.mass <= 0) return;
 
     // Apply forces
     this.acceleration = this.force.multiplyByScalar(1 / this.mass);
@@ -2563,6 +2597,24 @@ class GameObjectBuilder {
     return this;
   }
 
+  withRigidbody(mass = 1.0, gravityScale = 1.0, bodyType = 'dynamic') {
+    const rigidbody = new Rigidbody(mass, gravityScale, bodyType);
+    this.gameObject.addComponent(rigidbody);
+    return this;
+  }
+
+  withStaticBody() {
+    return this.withRigidbody(Infinity, 0, 'static');
+  }
+
+  withKinematicBody(mass = 1.0) {
+    return this.withRigidbody(mass, 0, 'kinematic');
+  }
+
+  withDynamicBody(mass = 1.0, gravityScale = 1.0) {
+    return this.withRigidbody(mass, gravityScale, 'dynamic');
+  }
+
   build() {
     this.scene.addGameObject(this.gameObject);
     return this.gameObject;
@@ -3119,16 +3171,18 @@ class InputManager {
     this.updateGamepadState();
     
     // Update previous states for proper pressed/released detection
-    this.previousKeys.clear();
-    this.keys.forEach((value, key) => this.previousKeys.set(key, value));
+    // Store current states as previous for next frame
+    const newPreviousKeys = new Map();
+    this.keys.forEach((value, key) => newPreviousKeys.set(key, value));
+    this.previousKeys = newPreviousKeys;
 
-    this.previousMouseButtons.clear();
-    this.mouseButtons.forEach((value, key) =>
-      this.previousMouseButtons.set(key, value)
-    );
+    const newPreviousMouseButtons = new Map();
+    this.mouseButtons.forEach((value, key) => newPreviousMouseButtons.set(key, value));
+    this.previousMouseButtons = newPreviousMouseButtons;
     
-    this.previousTouches.clear();
-    this.touches.forEach((value, key) => this.previousTouches.set(key, value));
+    const newPreviousTouches = new Map();
+    this.touches.forEach((value, key) => newPreviousTouches.set(key, value));
+    this.previousTouches = newPreviousTouches;
   }
 }
 
@@ -3619,6 +3673,44 @@ class AssetManager {
     
     // Create placeholder assets
     this.createPlaceholderAssets();
+  }
+  
+  createPlaceholderAssets() {
+    // Create a simple colored rectangle as placeholder image
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    
+    // Create a magenta/pink placeholder
+    ctx.fillStyle = '#ff00ff';
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('?', 16, 20);
+    
+    const placeholderImage = new Image();
+    placeholderImage.src = canvas.toDataURL();
+    this.placeholderAssets.set('image', placeholderImage);
+    
+    // Create a silent audio placeholder
+    const audioContext = new (window.AudioContext || window.webkitAudioContext || function(){})();
+    if (audioContext.createBuffer) {
+      try {
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const placeholderAudio = document.createElement('audio');
+        this.placeholderAssets.set('audio', placeholderAudio);
+      } catch (e) {
+        // Fallback for environments without audio support
+        const placeholderAudio = document.createElement('audio');
+        this.placeholderAssets.set('audio', placeholderAudio);
+      }
+    } else {
+      // Simple fallback
+      const placeholderAudio = document.createElement('audio');
+      this.placeholderAssets.set('audio', placeholderAudio);
+    }
   }
   
   // Register a batch of assets by name
@@ -4650,9 +4742,7 @@ if (typeof module !== "undefined" && module.exports) {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
 }
 
@@ -4690,9 +4780,7 @@ if (typeof window !== "undefined") {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
 }
 
@@ -4810,9 +4898,7 @@ if (typeof window !== "undefined" && !window.GameEngine) {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
 }
 
@@ -4867,9 +4953,7 @@ if (typeof window !== "undefined") {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
   
   // Merge with existing GameEngine
