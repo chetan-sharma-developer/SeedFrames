@@ -1008,32 +1008,58 @@
         // ==================== INPUT HANDLING ====================
         
         function setupInputHandling() {
-            // Restart key
-            engine.inputManager.onKeyPressed('KeyR', () => {
-                if (!gameState.gameOver) {
-                    restartGame();
+            // Create input handler component that checks for key presses each frame
+            const inputHandler = new class extends GameEngine.Component {
+                constructor() {
+                    super();
+                    this.previousKeys = new Map();
                 }
-            });
-            
-            // Pause key
-            engine.inputManager.onKeyPressed('KeyP', () => {
-                if (engine.gameLoop.isRunning) {
-                    engine.pause();
-                } else {
-                    engine.resume();
+                
+                update(deltaTime) {
+                    // Check for key presses (not held down)
+                    if (this.isKeyJustPressed('KeyR') && !gameState.gameOver) {
+                        restartGame();
+                    }
+                    
+                    if (this.isKeyJustPressed('KeyP')) {
+                        if (engine.gameLoop.isRunning) {
+                            engine.pause();
+                        } else {
+                            engine.resume();
+                        }
+                    }
+                    
+                    if (this.isKeyJustPressed('KeyD')) {
+                        engine.setDebugMode(!GameEngine.Debug.enabled);
+                    }
+                    
+                    if (this.isKeyJustPressed('KeyM')) {
+                        const soundEnabled = audioManager.toggle();
+                        console.log(`Sound ${soundEnabled ? 'enabled' : 'disabled'}`);
+                    }
+                    
+                    // Update previous keys state
+                    this.updatePreviousKeys();
                 }
-            });
+                
+                isKeyJustPressed(keyCode) {
+                    const currentlyPressed = engine.inputManager.isKeyDown(keyCode);
+                    const wasPressed = this.previousKeys.get(keyCode) || false;
+                    return currentlyPressed && !wasPressed;
+                }
+                
+                updatePreviousKeys() {
+                    // Store current key states for next frame
+                    const keysToCheck = ['KeyR', 'KeyP', 'KeyD', 'KeyM'];
+                    keysToCheck.forEach(key => {
+                        this.previousKeys.set(key, engine.inputManager.isKeyDown(key));
+                    });
+                }
+            };
             
-            // Debug toggle
-            engine.inputManager.onKeyPressed('KeyD', () => {
-                engine.setDebugMode(!GameEngine.Debug.enabled);
-            });
-            
-            // Sound toggle
-            engine.inputManager.onKeyPressed('KeyM', () => {
-                const soundEnabled = audioManager.toggle();
-                console.log(`Sound ${soundEnabled ? 'enabled' : 'disabled'}`);
-            });
+            // Add input handler to a persistent game object
+            const inputGameObject = gameScene.createGameObject('InputHandler').build();
+            inputGameObject.addComponent(inputHandler);
         }
 
         // ==================== INITIALIZATION ====================

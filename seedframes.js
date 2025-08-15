@@ -3119,16 +3119,18 @@ class InputManager {
     this.updateGamepadState();
     
     // Update previous states for proper pressed/released detection
-    this.previousKeys.clear();
-    this.keys.forEach((value, key) => this.previousKeys.set(key, value));
+    // Store current states as previous for next frame
+    const newPreviousKeys = new Map();
+    this.keys.forEach((value, key) => newPreviousKeys.set(key, value));
+    this.previousKeys = newPreviousKeys;
 
-    this.previousMouseButtons.clear();
-    this.mouseButtons.forEach((value, key) =>
-      this.previousMouseButtons.set(key, value)
-    );
+    const newPreviousMouseButtons = new Map();
+    this.mouseButtons.forEach((value, key) => newPreviousMouseButtons.set(key, value));
+    this.previousMouseButtons = newPreviousMouseButtons;
     
-    this.previousTouches.clear();
-    this.touches.forEach((value, key) => this.previousTouches.set(key, value));
+    const newPreviousTouches = new Map();
+    this.touches.forEach((value, key) => newPreviousTouches.set(key, value));
+    this.previousTouches = newPreviousTouches;
   }
 }
 
