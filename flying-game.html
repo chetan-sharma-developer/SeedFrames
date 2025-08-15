@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flying Game - SeedFrames Engine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #game-container {
+            border: 3px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #000;
+        }
+        h1 {
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+        }
+        .controls {
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>✈️ Flying Game</h1>
+    <div id="game-container"></div>
+    <div class="controls">
+        <p><strong>Controls:</strong> WASD or Arrow Keys to fly, Space for boost</p>
+        <p><strong>Goal:</strong> Collect stars and avoid clouds!</p>
+    </div>
+
+    <script src="src/seedframes.js"></script>
+    <script>
+        // Wait for engine to load
+        function checkEngine() {
+            if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                initGame();
+            } else {
+                setTimeout(checkEngine, 100);
+            }
+        }
+
+        async function initGame() {
+            const engine = new GameEngine.SeedFrames({
+                width: 800,
+                height: 600,
+                containerId: 'game-container',
+                backgroundColor: '#87CEEB',
+                debug: true
+            });
+
+            // Register SVG assets
+            await engine.assetManagement({
+                assets: {
+                    plane: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="24" viewBox="0 0 32 24">
+                            <!-- Plane body -->
+                            <ellipse cx="16" cy="12" rx="12" ry="6" fill="#FF6B6B"/>
+                            <!-- Wings -->
+                            <path d="M 8 8 L 4 4 L 6 8 L 8 8 Z" fill="#E74C3C"/>
+                            <path d="M 24 8 L 28 4 L 26 8 L 24 8 Z" fill="#E74C3C"/>
+                            <!-- Tail -->
+                            <path d="M 4 10 L 2 6 L 4 6 L 6 10 Z" fill="#C0392B"/>
+                            <!-- Windows -->
+                            <circle cx="12" cy="10" r="2" fill="#87CEEB"/>
+                            <circle cx="20" cy="10" r="2" fill="#87CEEB"/>
+                            <!-- Propeller -->
+                            <rect x="28" y="11" width="4" height="2" fill="#2C3E50"/>
+                        </svg>
+                    `),
+                    cloud: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="48" viewBox="0 0 64 48">
+                            <circle cx="16" cy="24" r="12" fill="#FFFFFF" opacity="0.8"/>
+                            <circle cx="32" cy="20" r="16" fill="#FFFFFF" opacity="0.8"/>
+                            <circle cx="48" cy="24" r="12" fill="#FFFFFF" opacity="0.8"/>
+                            <circle cx="24" cy="32" r="8" fill="#FFFFFF" opacity="0.8"/>
+                            <circle cx="40" cy="32" r="8" fill="#FFFFFF" opacity="0.8"/>
+                        </svg>
+                    `),
+                    star: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+                            <polygon points="10,2 12,8 18,8 13,12 15,18 10,14 5,18 7,12 2,8 8,8" fill="#FFD700"/>
+                            <polygon points="10,4 11,8 15,8 12,11 13,15 10,12 7,15 8,11 5,8 9,8" fill="#FFA500"/>
+                        </svg>
+                    `),
+                    background: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+                            <defs>
+                                <linearGradient id="sky" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#87CEEB"/>
+                                    <stop offset="100%" style="stop-color:#E0F6FF"/>
+                                </linearGradient>
+                            </defs>
+                            <rect width="800" height="600" fill="url(#sky)"/>
+                            <!-- Distant mountains -->
+                            <polygon points="0,500 100,400 200,450 300,380 400,420 500,350 600,400 700,380 800,420 800,600 0,600" fill="#8B4513" opacity="0.3"/>
+                            <polygon points="0,520 150,450 250,480 350,420 450,450 550,400 650,420 750,400 800,430 800,600 0,600" fill="#A0522D" opacity="0.2"/>
+                        </svg>
+                    `),
+                    particle: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 6 6">
+                            <circle cx="3" cy="3" r="2" fill="#FF6600"/>
+                        </svg>
+                    `)
+                }
+            });
+
+            const scene = new GameEngine.Scene('main');
+            engine.sceneManager.add('main', scene);
+
+            // Create background
+            scene.createGameObject('Background')
+                .at(400, 300)
+                .asset('background', 800, 600)
+                .build();
+
+            // Create player plane
+            const player = scene.createGameObject('Player')
+                .at(200, 300)
+                .asset('plane', 32, 24)
+                .withCollider('box', 32, 24, false, 'Player')
+                .withFlyingPlayer({
+                    speed: 200,
+                    maxSpeed: 300,
+                    acceleration: 150,
+                    deceleration: 100,
+                    onBoost: () => console.log('Player boosting!')
+                })
+                .build();
+
+            // Game state
+            let score = 0;
+            let stars = [];
+            let clouds = [];
+            let particles = [];
+            let gameTime = 0;
+
+            // Add UI
+            const uiSystem = new GameEngine.UISystem();
+            scene.addGameObject(uiSystem);
+
+            const scoreText = new GameEngine.UIText('Score: 0', 20, 20, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(scoreText);
+
+            const speedText = new GameEngine.UIText('Speed: 0', 20, 50, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(speedText);
+
+            const timeText = new GameEngine.UIText('Time: 0s', 20, 80, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(timeText);
+
+            // Star spawning
+            function spawnStar() {
+                const x = Math.random() * 700 + 50;
+                const y = Math.random() * 500 + 50;
+                
+                const star = scene.createGameObject('Star')
+                    .at(x, y)
+                    .asset('star', 20, 20)
+                    .withCollider('circle', 20, 20, true, 'Collectible')
+                    .build();
+
+                // Add star behavior
+                star.rotationSpeed = 90; // degrees per second
+                star.lifetime = 15.0;
+                star.timer = 0;
+
+                star.update = (deltaTime) => {
+                    star.transform.rotation += (star.rotationSpeed * Math.PI / 180) * deltaTime;
+                    star.timer += deltaTime;
+                    
+                    if (star.timer >= star.lifetime) {
+                        star.destroy();
+                        stars = stars.filter(s => s !== star);
+                    }
+                };
+
+                // Star collection
+                const collider = star.getComponent(GameEngine.Collider);
+                collider.onCollisionEnter = (other) => {
+                    if (other.getComponent(GameEngine.FlyingPlayer)) {
+                        console.log('Star collected!');
+                        score += 100;
+                        star.destroy();
+                        stars = stars.filter(s => s !== star);
+                        
+                        // Create particle effect
+                        createStarParticles(star.transform.position.x, star.transform.position.y);
+                    }
+                };
+
+                stars.push(star);
+            }
+
+            // Cloud spawning
+            function spawnCloud() {
+                const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+                let x, y;
+                
+                switch(side) {
+                    case 0: // top
+                        x = Math.random() * 800;
+                        y = -50;
+                        break;
+                    case 1: // right
+                        x = 850;
+                        y = Math.random() * 600;
+                        break;
+                    case 2: // bottom
+                        x = Math.random() * 800;
+                        y = 650;
+                        break;
+                    case 3: // left
+                        x = -50;
+                        y = Math.random() * 600;
+                        break;
+                }
+
+                const cloud = scene.createGameObject('Cloud')
+                    .at(x, y)
+                    .asset('cloud', 64, 48)
+                    .withCollider('box', 64, 48, false, 'Obstacle')
+                    .build();
+
+                // Add cloud movement
+                const speed = 30 + Math.random() * 40;
+                const direction = new GameEngine.Vector2(
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1
+                ).normalize();
+
+                cloud.update = (deltaTime) => {
+                    cloud.transform.position.x += direction.x * speed * deltaTime;
+                    cloud.transform.position.y += direction.y * speed * deltaTime;
+                    
+                    // Remove if off screen
+                    if (cloud.transform.position.x < -100 || cloud.transform.position.x > 900 ||
+                        cloud.transform.position.y < -100 || cloud.transform.position.y > 700) {
+                        cloud.destroy();
+                        clouds = clouds.filter(c => c !== cloud);
+                    }
+                };
+
+                // Cloud collision with player
+                const collider = cloud.getComponent(GameEngine.Collider);
+                collider.onCollisionEnter = (other) => {
+                    if (other.getComponent(GameEngine.FlyingPlayer)) {
+                        console.log('Player hit cloud!');
+                        cloud.destroy();
+                        clouds = clouds.filter(c => c !== cloud);
+                        // Reset player position
+                        player.transform.position = new GameEngine.Vector2(200, 300);
+                    }
+                };
+
+                clouds.push(cloud);
+            }
+
+            // Particle effects
+            function createStarParticles(x, y) {
+                for (let i = 0; i < 8; i++) {
+                    const particle = scene.createGameObject('Particle')
+                        .at(x, y)
+                        .asset('particle', 6, 6)
+                        .build();
+
+                    const angle = (i / 8) * Math.PI * 2;
+                    const speed = 50 + Math.random() * 50;
+                    particle.velocity = new GameEngine.Vector2(
+                        Math.cos(angle) * speed,
+                        Math.sin(angle) * speed
+                    );
+                    particle.lifetime = 1.0;
+                    particle.timer = 0;
+
+                    particle.update = (deltaTime) => {
+                        particle.transform.position.x += particle.velocity.x * deltaTime;
+                        particle.transform.position.y += particle.velocity.y * deltaTime;
+                        particle.timer += deltaTime;
+                        
+                        if (particle.timer >= particle.lifetime) {
+                            particle.destroy();
+                            particles = particles.filter(p => p !== particle);
+                        }
+                    };
+
+                    particles.push(particle);
+                }
+            }
+
+            // Spawn initial objects
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => spawnStar(), i * 1000);
+            }
+
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => spawnCloud(), i * 2000);
+            }
+
+            // Spawn objects periodically
+            setInterval(() => {
+                if (stars.length < 8) {
+                    spawnStar();
+                }
+            }, 3000);
+
+            setInterval(() => {
+                if (clouds.length < 5) {
+                    spawnCloud();
+                }
+            }, 4000);
+
+            // Input handling
+            const keys = {};
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+                
+                if (e.code === 'Space') {
+                    const flyingComponent = player.getComponent(GameEngine.FlyingPlayer);
+                    if (flyingComponent) {
+                        flyingComponent.boost();
+                    }
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+
+            // Game loop update
+            scene.update = (deltaTime) => {
+                gameTime += deltaTime;
+
+                const flyingComponent = player.getComponent(GameEngine.FlyingPlayer);
+                if (flyingComponent) {
+                    // Handle input
+                    if (keys['KeyW'] || keys['ArrowUp']) {
+                        flyingComponent.moveUp(1.0);
+                    }
+                    if (keys['KeyS'] || keys['ArrowDown']) {
+                        flyingComponent.moveDown(1.0);
+                    }
+                    if (keys['KeyA'] || keys['ArrowLeft']) {
+                        flyingComponent.moveLeft(1.0);
+                    }
+                    if (keys['KeyD'] || keys['ArrowRight']) {
+                        flyingComponent.moveRight(1.0);
+                    }
+
+                    // Update component
+                    flyingComponent.update(deltaTime);
+
+                    // Update UI
+                    const speed = Math.round(flyingComponent.getSpeed());
+                    speedText.text = `Speed: ${speed}`;
+                }
+
+                // Update stars
+                stars.forEach((star, index) => {
+                    if (star && star.update) {
+                        star.update(deltaTime);
+                    }
+                });
+
+                // Update clouds
+                clouds.forEach((cloud, index) => {
+                    if (cloud && cloud.update) {
+                        cloud.update(deltaTime);
+                    }
+                });
+
+                // Update particles
+                particles.forEach((particle, index) => {
+                    if (particle && particle.update) {
+                        particle.update(deltaTime);
+                    }
+                });
+
+                // Update UI
+                scoreText.text = `Score: ${score}`;
+                timeText.text = `Time: ${Math.floor(gameTime)}s`;
+
+                // Keep player in bounds
+                if (player.transform.position.x < 16) player.transform.position.x = 16;
+                if (player.transform.position.x > 784) player.transform.position.x = 784;
+                if (player.transform.position.y < 12) player.transform.position.y = 12;
+                if (player.transform.position.y > 588) player.transform.position.y = 588;
+            };
+
+            // Load the scene
+            engine.sceneManager.load('main');
+            
+            // Start the engine
+            engine.start();
+        }
+
+        // Start checking for engine
+        checkEngine();
+    </script>
+</body>
+</html>

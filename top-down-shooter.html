@@ -3,760 +3,427 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galaxy Defender - SeedFrames Engine</title>
+    <title>Top-Down Shooter - SeedFrames Engine</title>
     <style>
         body {
             margin: 0;
             padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 100%);
-            color: white;
-            text-align: center;
-        }
-        
-        .game-container {
-            border: 3px solid #00ff88;
-            border-radius: 10px;
-            margin: 20px auto;
-            display: inline-block;
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-        }
-        
-        .game-info {
-            background: rgba(0, 0, 0, 0.9);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px auto;
-            max-width: 800px;
-        }
-        
-        .controls {
-            background: rgba(0, 255, 136, 0.2);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .stats {
             display: flex;
-            justify-content: space-around;
-            margin: 10px 0;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
         }
-        
-        .stat {
-            background: rgba(26, 26, 46, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            min-width: 120px;
+        #game-container {
+            border: 3px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #000;
         }
-        
         h1 {
-            text-shadow: 2px 2px 4px rgba(0, 255, 136, 0.8);
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             margin-bottom: 20px;
-            color: #00ff88;
         }
-        
-        .wave-info {
-            background: rgba(255, 0, 128, 0.3);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border: 2px solid #ff0080;
-        }
-        
-        .weapon-info {
-            background: rgba(0, 128, 255, 0.3);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border: 2px solid #0080ff;
-        }
-        
-        .power-up-indicator {
-            background: rgba(255, 215, 0, 0.3);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border: 2px solid gold;
+        .controls {
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h1>🚀 Galaxy Defender</h1>
-    
-    <div class="game-info">
-        <div class="wave-info">
-            <strong>Wave: <span id="current-wave">1</span></strong>
-            <strong>Enemies Remaining: <span id="enemies-remaining">0</span></strong>
-            <strong>Next Wave In: <span id="wave-timer">--</span></strong>
-        </div>
-        
-        <div class="weapon-info">
-            <strong>Weapon: <span id="current-weapon">Laser</span></strong>
-            <strong>Ammo: <span id="ammo">∞</span></strong>
-            <button onclick="switchWeapon('laser')">Laser</button>
-            <button onclick="switchWeapon('plasma')">Plasma</button>
-            <button onclick="switchWeapon('missile')">Missile</button>
-        </div>
-        
-        <div class="power-up-indicator">
-            <strong>Power-ups:</strong>
-            <span id="power-ups">None</span>
-        </div>
-        
-        <div class="stats">
-            <div class="stat">
-                <strong>Score:</strong><br>
-                <span id="score">0</span>
-            </div>
-            <div class="stat">
-                <strong>Health:</strong><br>
-                <span id="health">100</span>
-            </div>
-            <div class="stat">
-                <strong>Kills:</strong><br>
-                <span id="kills">0</span>
-            </div>
-            <div class="stat">
-                <strong>Accuracy:</strong><br>
-                <span id="accuracy">0</span>%
-            </div>
-        </div>
-        
-        <div class="controls">
-            <strong>Controls:</strong><br>
-            <strong>WASD</strong> or <strong>Arrow Keys</strong> to move<br>
-            <strong>Mouse</strong> to aim and shoot<br>
-            <strong>1-3</strong> to switch weapons<br>
-            <strong>R</strong> to reload<br>
-            <strong>Space</strong> to use power-up
-        </div>
+    <h1>🎯 Top-Down Shooter</h1>
+    <div id="game-container"></div>
+    <div class="controls">
+        <p><strong>Controls:</strong> WASD to move, Mouse to aim, Click to shoot</p>
+        <p><strong>Goal:</strong> Defeat all enemies and survive as long as possible!</p>
     </div>
-    
-    <div class="game-container" id="game-container"></div>
-    
-    <script src="./src/seedframes.js"></script>
+
+    <script src="src/seedframes.js"></script>
     <script>
-        let engine, scene, player;
-        let gameState = {
-            score: 0,
-            health: 100,
-            kills: 0,
-            shotsFired: 0,
-            shotsHit: 0,
-            currentWave: 1,
-            enemiesRemaining: 0,
-            waveTimer: 0,
-            currentWeapon: 'laser',
-            powerUps: []
-        };
-        
-        let enemies = [];
-        let bullets = [];
-        let powerUps = [];
-        let waveStartTime = 0;
-        let lastShotTime = 0;
-        
-        // Weapon configurations
-        const weapons = {
-            laser: {
-                name: 'Laser',
-                damage: 25,
-                fireRate: 0.1,
-                ammo: Infinity,
-                bulletSpeed: 400,
-                bulletSize: 4,
-                color: '#00ff88'
-            },
-            plasma: {
-                name: 'Plasma',
-                damage: 40,
-                fireRate: 0.3,
-                ammo: 30,
-                bulletSpeed: 350,
-                bulletSize: 6,
-                color: '#0080ff'
-            },
-            missile: {
-                name: 'Missile',
-                damage: 80,
-                fireRate: 0.8,
-                ammo: 10,
-                bulletSpeed: 300,
-                bulletSize: 8,
-                color: '#ff0080'
-            }
-        };
-        
-        // Enemy types
-        const enemyTypes = [
-            { name: 'Scout', health: 30, speed: 80, size: 20, color: '#ff4444', points: 100 },
-            { name: 'Fighter', health: 60, speed: 60, size: 25, color: '#ff8800', points: 200 },
-            { name: 'Destroyer', health: 120, speed: 40, size: 35, color: '#ff0080', points: 400 }
-        ];
-        
-        function initGame() {
-            try {
-                engine = new GameEngine.SeedFrames({
-                    width: 1200,
-                    height: 800,
-                    containerId: 'game-container',
-                    backgroundColor: '#0c0c0c',
-                    debug: false
-                });
-                
-                scene = engine.createScene('ShooterArena');
-                engine.sceneManager.add('main', scene);
-                engine.sceneManager.load('main');
-                
-                // Setup physics
-                engine.physicsEngine.setCollisionRule('Player', 'Enemy', true);
-                engine.physicsEngine.setCollisionRule('Player', 'PowerUp', true);
-                engine.physicsEngine.setCollisionRule('PlayerBullet', 'Enemy', true);
-                engine.physicsEngine.setCollisionRule('EnemyBullet', 'Player', true);
-                
-                // Create player
-                createPlayer();
-                
-                // Setup camera
-                scene.camera.follow(player);
-                
-                // Start first wave
-                startWave();
-                
-                engine.start();
-                console.log('Galaxy Defender started!');
-                
-            } catch (error) {
-                console.error('Failed to initialize game:', error);
+        // Wait for engine to load
+        function checkEngine() {
+            if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                initGame();
+            } else {
+                setTimeout(checkEngine, 100);
             }
         }
-        
-        function createPlayer() {
-            player = scene.createGameObject('Player')
-                .at(600, 400)
-                .withColor('#00ff88', 32, 32)
-                .withCollider('box', 32, 32, false, 'Player')
+
+        async function initGame() {
+            const engine = new GameEngine.SeedFrames({
+                width: 800,
+                height: 600,
+                containerId: 'game-container',
+                backgroundColor: '#2F4F4F',
+                debug: true
+            });
+
+            // Register SVG assets
+            await engine.assetManagement({
+                assets: {
+                    player: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                            <!-- Player body -->
+                            <circle cx="16" cy="16" r="12" fill="#4A90E2"/>
+                            <!-- Player details -->
+                            <circle cx="16" cy="16" r="8" fill="#2E5C8A"/>
+                            <!-- Gun barrel -->
+                            <rect x="24" y="14" width="8" height="4" fill="#333333"/>
+                            <!-- Eyes -->
+                            <circle cx="14" cy="12" r="2" fill="#FFFFFF"/>
+                            <circle cx="18" cy="12" r="2" fill="#FFFFFF"/>
+                            <circle cx="14" cy="12" r="1" fill="#000000"/>
+                            <circle cx="18" cy="12" r="1" fill="#000000"/>
+                        </svg>
+                    `),
+                    enemy: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                            <!-- Enemy body -->
+                            <circle cx="12" cy="12" r="10" fill="#FF4444"/>
+                            <!-- Enemy details -->
+                            <circle cx="12" cy="12" r="6" fill="#CC3333"/>
+                            <!-- Spikes -->
+                            <polygon points="12,2 14,8 20,8 15,12 17,18 12,14 7,18 9,12 4,8 10,8" fill="#AA2222"/>
+                            <!-- Eyes -->
+                            <circle cx="9" cy="9" r="2" fill="#FFFFFF"/>
+                            <circle cx="15" cy="9" r="2" fill="#FFFFFF"/>
+                            <circle cx="9" cy="9" r="1" fill="#000000"/>
+                            <circle cx="15" cy="9" r="1" fill="#000000"/>
+                        </svg>
+                    `),
+                    bullet: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">
+                            <circle cx="4" cy="4" r="3" fill="#FFFF00"/>
+                            <circle cx="4" cy="4" r="1" fill="#FFFFFF"/>
+                        </svg>
+                    `),
+                    powerup: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+                            <polygon points="10,2 12,8 18,8 13,12 15,18 10,14 5,18 7,12 2,8 8,8" fill="#FFD700"/>
+                            <polygon points="10,4 11,8 15,8 12,11 13,15 10,12 7,15 8,11 5,8 9,8" fill="#FFA500"/>
+                        </svg>
+                    `),
+                    explosion: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                            <circle cx="16" cy="16" r="14" fill="#FF6600"/>
+                            <circle cx="16" cy="16" r="10" fill="#FF8800"/>
+                            <circle cx="16" cy="16" r="6" fill="#FFAA00"/>
+                            <circle cx="16" cy="16" r="2" fill="#FFFF00"/>
+                        </svg>
+                    `),
+                    background: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+                            <defs>
+                                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#3F5F5F" stroke-width="1"/>
+                                </pattern>
+                            </defs>
+                            <rect width="800" height="600" fill="#2F4F4F"/>
+                            <rect width="800" height="600" fill="url(#grid)"/>
+                        </svg>
+                    `)
+                }
+            });
+
+            const scene = new GameEngine.Scene('main');
+            engine.sceneManager.add('main', scene);
+
+            // Create player
+            const player = scene.createGameObject('Player')
+                .at(400, 300)
+                .asset('player', 32, 32)
+                .withCollider('circle', 32, 32, false, 'Player')
                 .withTopDownPlayer({
-                    speed: 200,
-                    onDeath: () => playerDeath()
+                    speed: 150,
+                    onMove: () => console.log('Player moving!')
                 })
                 .build();
+
+            // Create background
+            scene.createGameObject('Background')
+                .at(400, 300)
+                .asset('background', 800, 600)
+                .build();
+
+            // Game state
+            let score = 0;
+            let enemies = [];
+            let bullets = [];
+            let powerups = [];
+            let wave = 1;
+            let enemiesPerWave = 5;
+
+            // Add UI
+            const uiSystem = new GameEngine.UISystem();
+            scene.addGameObject(uiSystem);
+
+            const scoreText = new GameEngine.UIText('Score: 0', 20, 20, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(scoreText);
+
+            const waveText = new GameEngine.UIText('Wave: 1', 20, 50, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(waveText);
+
+            const enemiesText = new GameEngine.UIText('Enemies: 0', 20, 80, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(enemiesText);
+
+            // Mouse tracking
+            let mouseX = 400;
+            let mouseY = 300;
+            const canvas = document.getElementById('game-container').querySelector('canvas');
             
-            // Add player components
-            player.addComponent(new PlayerShooterComponent());
-        }
-        
-        function startWave() {
-            gameState.currentWave++;
-            gameState.enemiesRemaining = 5 + (gameState.currentWave * 2);
-            waveStartTime = Date.now();
-            
-            // Spawn enemies
-            spawnEnemies();
-            
-            updateUI();
-        }
-        
-        function spawnEnemies() {
-            const spawnCount = Math.min(5, gameState.enemiesRemaining);
-            
-            for (let i = 0; i < spawnCount; i++) {
-                setTimeout(() => {
-                    if (gameState.enemiesRemaining > 0) {
-                        spawnEnemy();
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = e.clientX - rect.left;
+                mouseY = e.clientY - rect.top;
+            });
+
+            canvas.addEventListener('click', () => {
+                shootBullet();
+            });
+
+            // Shooting function
+            function shootBullet() {
+                const direction = new GameEngine.Vector2(mouseX - player.transform.position.x, mouseY - player.transform.position.y).normalize();
+                const bulletSpeed = 400;
+                
+                const bullet = scene.createGameObject('Bullet')
+                    .at(player.transform.position.x, player.transform.position.y)
+                    .asset('bullet', 8, 8)
+                    .withCollider('circle', 8, 8, false, 'Bullet')
+                    .build();
+
+                // Add bullet behavior
+                bullet.velocity = direction.multiplyByScalar(bulletSpeed);
+                bullet.lifetime = 3.0;
+                bullet.timer = 0;
+
+                bullet.update = (deltaTime) => {
+                    bullet.transform.position.x += bullet.velocity.x * deltaTime;
+                    bullet.transform.position.y += bullet.velocity.y * deltaTime;
+                    
+                    bullet.timer += deltaTime;
+                    if (bullet.timer >= bullet.lifetime) {
+                        bullet.destroy();
                     }
-                }, i * 500);
+
+                    // Wrap around screen
+                    if (bullet.transform.position.x < -10) bullet.transform.position.x = 810;
+                    if (bullet.transform.position.x > 810) bullet.transform.position.x = -10;
+                    if (bullet.transform.position.y < -10) bullet.transform.position.y = 610;
+                    if (bullet.transform.position.y > 610) bullet.transform.position.y = -10;
+                };
+
+                bullets.push(bullet);
             }
-        }
-        
-        function spawnEnemy() {
-            if (gameState.enemiesRemaining <= 0) return;
-            
-            // Choose random enemy type
-            const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-            
-            // Random spawn position around edges
-            let x, y;
-            const side = Math.floor(Math.random() * 4);
-            
-            switch(side) {
-                case 0: // Top
-                    x = Math.random() * 1200;
-                    y = -50;
-                    break;
-                case 1: // Right
-                    x = 1250;
-                    y = Math.random() * 800;
-                    break;
-                case 2: // Bottom
-                    x = Math.random() * 1200;
-                    y = 850;
-                    break;
-                case 3: // Left
-                    x = -50;
-                    y = Math.random() * 800;
-                    break;
+
+            // Enemy spawning
+            function spawnEnemy() {
+                const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+                let x, y;
+                
+                switch(side) {
+                    case 0: // top
+                        x = Math.random() * 800;
+                        y = -30;
+                        break;
+                    case 1: // right
+                        x = 830;
+                        y = Math.random() * 600;
+                        break;
+                    case 2: // bottom
+                        x = Math.random() * 800;
+                        y = 630;
+                        break;
+                    case 3: // left
+                        x = -30;
+                        y = Math.random() * 600;
+                        break;
+                }
+
+                const enemy = scene.createGameObject('Enemy')
+                    .at(x, y)
+                    .asset('enemy', 24, 24)
+                    .withCollider('circle', 24, 24, false, 'Enemy')
+                    .build();
+
+                // Add enemy AI
+                enemy.speed = 50 + Math.random() * 50;
+                enemy.update = (deltaTime) => {
+                    const direction = new GameEngine.Vector2(
+                        player.transform.position.x - enemy.transform.position.x,
+                        player.transform.position.y - enemy.transform.position.y
+                    ).normalize();
+                    
+                    enemy.transform.position.x += direction.x * enemy.speed * deltaTime;
+                    enemy.transform.position.y += direction.y * enemy.speed * deltaTime;
+                };
+
+                // Enemy collision with player
+                const collider = enemy.getComponent(GameEngine.Collider);
+                collider.onCollisionEnter = (other) => {
+                    if (other.getComponent(GameEngine.TopDownPlayer)) {
+                        console.log('Player hit by enemy!');
+                        enemy.destroy();
+                        enemies = enemies.filter(e => e !== enemy);
+                        // Reset player position
+                        player.transform.position = new GameEngine.Vector2(400, 300);
+                    }
+                };
+
+                enemies.push(enemy);
             }
-            
-            const enemy = scene.createGameObject(`Enemy${Date.now()}`)
-                .at(x, y)
-                .withColor(enemyType.color, enemyType.size, enemyType.size)
-                .withCollider('box', enemyType.size, enemyType.size, false, 'Enemy')
-                .build();
-            
-            // Add enemy AI component
-            enemy.addComponent(new EnemyAIComponent(enemyType));
-            enemies.push(enemy);
-            
-            gameState.enemiesRemaining--;
-            updateUI();
-        }
-        
-        function spawnPowerUp() {
-            const powerUpTypes = [
-                { name: 'Health', color: '#00ff00', effect: 'heal' },
-                { name: 'Speed', color: '#ffff00', effect: 'speed' },
-                { name: 'Damage', color: '#ff0000', effect: 'damage' }
-            ];
-            
-            const powerUpType = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
-            
-            const powerUp = scene.createGameObject(`PowerUp${Date.now()}`)
-                .at(Math.random() * 1100 + 50, Math.random() * 700 + 50)
-                .withColor(powerUpType.color, 20, 20)
-                .withCollider('box', 20, 20, true, 'PowerUp')
-                .build();
-            
-            powerUp.addComponent(new PowerUpComponent(powerUpType));
-            powerUps.push(powerUp);
-        }
-        
-        function switchWeapon(weaponType) {
-            if (weapons[weaponType]) {
-                gameState.currentWeapon = weaponType;
-                updateUI();
-                console.log(`Switched to ${weapons[weaponType].name}`);
+
+            // Powerup spawning
+            function spawnPowerup() {
+                const x = Math.random() * 700 + 50;
+                const y = Math.random() * 500 + 50;
+                
+                const powerup = scene.createGameObject('Powerup')
+                    .at(x, y)
+                    .asset('powerup', 20, 20)
+                    .withCollider('circle', 20, 20, true, 'Powerup')
+                    .build();
+
+                // Add powerup behavior
+                powerup.lifetime = 10.0;
+                powerup.timer = 0;
+                powerup.rotationSpeed = 90; // degrees per second
+
+                powerup.update = (deltaTime) => {
+                    powerup.transform.rotation += (powerup.rotationSpeed * Math.PI / 180) * deltaTime;
+                    powerup.timer += deltaTime;
+                    
+                    if (powerup.timer >= powerup.lifetime) {
+                        powerup.destroy();
+                        powerups = powerups.filter(p => p !== powerup);
+                    }
+                };
+
+                // Powerup collection
+                const collider = powerup.getComponent(GameEngine.Collider);
+                collider.onCollisionEnter = (other) => {
+                    if (other.getComponent(GameEngine.TopDownPlayer)) {
+                        console.log('Powerup collected!');
+                        score += 100;
+                        powerup.destroy();
+                        powerups = powerups.filter(p => p !== powerup);
+                    }
+                };
+
+                powerups.push(powerup);
             }
-        }
-        
-        function fireWeapon(mouseX, mouseY) {
-            const currentTime = Date.now();
-            const weapon = weapons[gameState.currentWeapon];
-            
-            // Check fire rate
-            if (currentTime - lastShotTime < weapon.fireRate * 1000) return;
-            
-            // Check ammo
-            if (weapon.ammo !== Infinity && gameState.ammo <= 0) {
-                console.log('Out of ammo!');
-                return;
+
+            // Spawn initial enemies
+            for (let i = 0; i < enemiesPerWave; i++) {
+                setTimeout(() => spawnEnemy(), i * 1000);
             }
-            
-            lastShotTime = currentTime;
-            gameState.shotsFired++;
-            
-            if (weapon.ammo !== Infinity) {
-                gameState.ammo--;
-            }
-            
-            // Calculate direction
-            const direction = new GameEngine.Vector2(
-                mouseX - player.transform.position.x,
-                mouseY - player.transform.position.y
-            ).normalize();
-            
-            // Create bullet
-            const bullet = scene.createGameObject('PlayerBullet')
-                .at(player.transform.position.x, player.transform.position.y)
-                .withColor(weapon.color, weapon.bulletSize, weapon.bulletSize)
-                .withCollider('box', weapon.bulletSize, weapon.bulletSize, false, 'PlayerBullet')
-                .build();
-            
-            // Add bullet behavior
-            const bulletComponent = bullet.addComponent(new BulletComponent(weapon, direction));
-            bullets.push(bullet);
-            
-            updateUI();
-        }
-        
-        function enemyKilled(enemy, points) {
-            gameState.score += points;
-            gameState.kills++;
-            gameState.shotsHit++;
-            
-            // Remove enemy
-            scene.removeGameObject(enemy);
-            enemies = enemies.filter(e => e !== enemy);
-            
-            // Check if wave is complete
-            if (enemies.length === 0 && gameState.enemiesRemaining <= 0) {
-                waveComplete();
-            }
-            
-            // Random chance to spawn power-up
-            if (Math.random() < 0.3) {
-                spawnPowerUp();
-            }
-            
-            updateUI();
-        }
-        
-        function waveComplete() {
-            console.log(`Wave ${gameState.currentWave} completed!`);
-            
-            // Start next wave after delay
-            setTimeout(() => {
-                startWave();
-            }, 3000);
-        }
-        
-        function playerDeath() {
-            alert(`Game Over! Final Score: ${gameState.score}\nWaves Survived: ${gameState.currentWave - 1}`);
-            
-            // Reset game
-            gameState = {
-                score: 0,
-                health: 100,
-                kills: 0,
-                shotsFired: 0,
-                shotsHit: 0,
-                currentWave: 1,
-                enemiesRemaining: 0,
-                waveTimer: 0,
-                currentWeapon: 'laser',
-                powerUps: []
-            };
-            
-            // Clear all objects and restart
-            clearGame();
-            createPlayer();
-            startWave();
-        }
-        
-        function clearGame() {
-            // Remove all game objects except the scene
-            if (scene) {
-                const objectsToRemove = [...scene.gameObjects];
-                objectsToRemove.forEach(obj => {
-                    if (obj.name !== 'Scene') {
-                        scene.removeGameObject(obj);
+
+            // Spawn powerups periodically
+            setInterval(() => {
+                if (powerups.length < 3) {
+                    spawnPowerup();
+                }
+            }, 5000);
+
+            // Game loop update
+            scene.update = (deltaTime) => {
+                // Update player rotation to face mouse
+                const direction = new GameEngine.Vector2(mouseX - player.transform.position.x, mouseY - player.transform.position.y);
+                player.transform.rotation = Math.atan2(direction.y, direction.x);
+
+                // Update bullets
+                bullets.forEach((bullet, index) => {
+                    if (bullet && bullet.update) {
+                        bullet.update(deltaTime);
                     }
                 });
-            }
-            
-            enemies = [];
-            bullets = [];
-            powerUps = [];
-        }
-        
-        function updateUI() {
-            document.getElementById('score').textContent = gameState.score;
-            document.getElementById('health').textContent = gameState.health;
-            document.getElementById('kills').textContent = gameState.kills;
-            document.getElementById('current-wave').textContent = gameState.currentWave;
-            document.getElementById('enemies-remaining').textContent = gameState.enemiesRemaining;
-            document.getElementById('current-weapon').textContent = weapons[gameState.currentWeapon].name;
-            document.getElementById('ammo').textContent = gameState.ammo === Infinity ? '∞' : gameState.ammo;
-            
-            // Calculate accuracy
-            const accuracy = gameState.shotsFired > 0 ? Math.round((gameState.shotsHit / gameState.shotsFired) * 100) : 0;
-            document.getElementById('accuracy').textContent = accuracy;
-            
-            // Update power-ups display
-            if (gameState.powerUps.length > 0) {
-                document.getElementById('power-ups').textContent = gameState.powerUps.join(', ');
-            } else {
-                document.getElementById('power-ups').textContent = 'None';
-            }
-        }
-        
-        // Custom Components
-        class PlayerShooterComponent extends GameEngine.Component {
-            constructor() {
-                super();
-                this.lastShotTime = 0;
-            }
-            
-            update(deltaTime) {
-                // Handle mouse input for shooting
-                // This would be handled by the engine's input system
-            }
-        }
-        
-        class BulletComponent extends GameEngine.Component {
-            constructor(weapon, direction) {
-                super();
-                this.weapon = weapon;
-                this.direction = direction;
-                this.speed = weapon.bulletSpeed;
-                this.lifetime = 3.0;
-                this.timer = 0;
-            }
-            
-            update(deltaTime) {
-                if (!this.gameObject) return;
-                
-                // Move bullet
-                this.gameObject.transform.position.x += this.direction.x * this.speed * deltaTime;
-                this.gameObject.transform.position.y += this.direction.y * this.speed * deltaTime;
-                
-                // Check lifetime
-                this.timer += deltaTime;
-                if (this.timer >= this.lifetime) {
-                    scene.removeGameObject(this.gameObject);
-                    bullets = bullets.filter(b => b !== this.gameObject);
-                }
-                
-                // Check bounds
-                const pos = this.gameObject.transform.position;
-                if (pos.x < -100 || pos.x > 1300 || pos.y < -100 || pos.y > 900) {
-                    scene.removeGameObject(this.gameObject);
-                    bullets = bullets.filter(b => b !== this.gameObject);
-                }
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name.includes('Enemy')) {
-                    const enemyAI = other.getComponent(EnemyAIComponent);
-                    if (enemyAI) {
-                        enemyAI.takeDamage(this.weapon.damage);
+
+                // Update enemies
+                enemies.forEach((enemy, index) => {
+                    if (enemy && enemy.update) {
+                        enemy.update(deltaTime);
                     }
-                    
-                    // Remove bullet
-                    scene.removeGameObject(this.gameObject);
-                    bullets = bullets.filter(b => b !== this.gameObject);
-                }
-            }
-        }
-        
-        class EnemyAIComponent extends GameEngine.Component {
-            constructor(enemyType) {
-                super();
-                this.enemyType = enemyType;
-                this.health = enemyType.health;
-                this.speed = enemyType.speed;
-                this.target = null;
-                this.lastShotTime = 0;
-                this.shotCooldown = 1.0 + Math.random() * 2.0;
-            }
-            
-            update(deltaTime) {
-                if (!this.gameObject) return;
-                
-                // Find player
-                if (!this.target) {
-                    this.target = scene.findGameObjectByName('Player');
-                }
-                
-                if (this.target) {
-                    // Move towards player
-                    const direction = this.target.transform.position.subtract(this.gameObject.transform.position);
-                    const distance = direction.magnitude();
-                    
-                    if (distance > 100) {
-                        // Move towards player
-                        const normalizedDirection = direction.normalize();
-                        this.gameObject.transform.position.x += normalizedDirection.x * this.speed * deltaTime;
-                        this.gameObject.transform.position.y += normalizedDirection.y * this.speed * deltaTime;
-                        
-                        // Rotate towards player
-                        const targetAngle = Math.atan2(normalizedDirection.y, normalizedDirection.x);
-                        this.gameObject.transform.rotation = targetAngle;
-                    } else if (distance < 200) {
-                        // Shoot at player
-                        this.tryShoot();
+                });
+
+                // Update powerups
+                powerups.forEach((powerup, index) => {
+                    if (powerup && powerup.update) {
+                        powerup.update(deltaTime);
                     }
-                }
-            }
-            
-            tryShoot() {
-                const currentTime = Date.now();
-                if (currentTime - this.lastShotTime < this.shotCooldown * 1000) return;
-                
-                this.lastShotTime = currentTime;
-                
-                // Create enemy bullet
-                const direction = this.target.transform.position.subtract(this.gameObject.transform.position).normalize();
-                
-                const bullet = scene.createGameObject('EnemyBullet')
-                    .at(this.gameObject.transform.position.x, this.gameObject.transform.position.y)
-                    .withColor('#ff0000', 6, 6)
-                    .withCollider('box', 6, 6, false, 'EnemyBullet')
-                    .build();
-                
-                bullet.addComponent(new EnemyBulletComponent(direction));
-            }
-            
-            takeDamage(amount) {
-                this.health -= amount;
-                
-                if (this.health <= 0) {
-                    enemyKilled(this.gameObject, this.enemyType.points);
-                }
-            }
-        }
-        
-        class EnemyBulletComponent extends GameEngine.Component {
-            constructor(direction) {
-                super();
-                this.direction = direction;
-                this.speed = 200;
-                this.lifetime = 2.0;
-                this.timer = 0;
-            }
-            
-            update(deltaTime) {
-                if (!this.gameObject) return;
-                
-                // Move bullet
-                this.gameObject.transform.position.x += this.direction.x * this.speed * deltaTime;
-                this.gameObject.transform.position.y += this.direction.y * this.speed * deltaTime;
-                
-                // Check lifetime
-                this.timer += deltaTime;
-                if (this.timer >= this.lifetime) {
-                    scene.removeGameObject(this.gameObject);
-                }
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name === 'Player') {
-                    // Damage player
-                    gameState.health -= 20;
-                    updateUI();
-                    
-                    if (gameState.health <= 0) {
-                        playerDeath();
-                    }
-                    
-                    // Remove bullet
-                    scene.removeGameObject(this.gameObject);
-                }
-            }
-        }
-        
-        class PowerUpComponent extends GameEngine.Component {
-            constructor(powerUpType) {
-                super();
-                this.powerUpType = powerUpType;
-                this.active = true;
-            }
-            
-            update(deltaTime) {
-                // Rotate power-up
-                if (this.gameObject) {
-                    this.gameObject.transform.rotation += deltaTime * 2;
-                }
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name === 'Player' && this.active) {
-                    this.active = false;
-                    this.applyPowerUp();
-                    
-                    // Remove power-up
-                    scene.removeGameObject(this.gameObject);
-                    powerUps = powerUps.filter(p => p !== this.gameObject);
-                }
-            }
-            
-            applyPowerUp() {
-                switch(this.powerUpType.effect) {
-                    case 'heal':
-                        gameState.health = Math.min(100, gameState.health + 30);
-                        console.log('Health restored!');
-                        break;
-                    case 'speed':
-                        // Increase player speed temporarily
-                        const playerComponent = player.getComponent(GameEngine.TopDownPlayer);
-                        if (playerComponent) {
-                            const originalSpeed = playerComponent.speed;
-                            playerComponent.speed *= 1.5;
-                            setTimeout(() => {
-                                playerComponent.speed = originalSpeed;
-                            }, 10000);
+                });
+
+                // Check bullet-enemy collisions
+                bullets.forEach((bullet, bulletIndex) => {
+                    enemies.forEach((enemy, enemyIndex) => {
+                        if (bullet && enemy) {
+                            const bulletCollider = bullet.getComponent(GameEngine.Collider);
+                            const enemyCollider = enemy.getComponent(GameEngine.Collider);
+                            
+                            if (bulletCollider && enemyCollider) {
+                                const distance = bullet.transform.position.distance(enemy.transform.position);
+                                if (distance < 20) {
+                                    // Create explosion
+                                    const explosion = scene.createGameObject('Explosion')
+                                        .at(enemy.transform.position.x, enemy.transform.position.y)
+                                        .asset('explosion', 32, 32)
+                                        .build();
+                                    
+                                    explosion.lifetime = 0.5;
+                                    explosion.timer = 0;
+                                    explosion.update = (deltaTime) => {
+                                        explosion.timer += deltaTime;
+                                        explosion.transform.scale.x = 1 + explosion.timer * 2;
+                                        explosion.transform.scale.y = 1 + explosion.timer * 2;
+                                        explosion.alpha = 1 - explosion.timer / explosion.lifetime;
+                                        
+                                        if (explosion.timer >= explosion.lifetime) {
+                                            explosion.destroy();
+                                        }
+                                    };
+
+                                    // Destroy bullet and enemy
+                                    bullet.destroy();
+                                    enemy.destroy();
+                                    bullets.splice(bulletIndex, 1);
+                                    enemies.splice(enemyIndex, 1);
+                                    
+                                    score += 50;
+                                }
+                            }
                         }
-                        console.log('Speed increased!');
-                        break;
-                    case 'damage':
-                        // Increase weapon damage temporarily
-                        Object.values(weapons).forEach(weapon => {
-                            weapon.damage *= 1.5;
-                        });
-                        setTimeout(() => {
-                            Object.values(weapons).forEach(weapon => {
-                                weapon.damage = Math.round(weapon.damage / 1.5);
-                            });
-                        }, 15000);
-                        console.log('Damage increased!');
-                        break;
+                    });
+                });
+
+                // Check if wave is complete
+                if (enemies.length === 0) {
+                    wave++;
+                    enemiesPerWave += 2;
+                    for (let i = 0; i < enemiesPerWave; i++) {
+                        setTimeout(() => spawnEnemy(), i * 800);
+                    }
                 }
-                
-                updateUI();
-            }
+
+                // Update UI
+                scoreText.text = `Score: ${score}`;
+                waveText.text = `Wave: ${wave}`;
+                enemiesText.text = `Enemies: ${enemies.length}`;
+            };
+
+            // Load the scene
+            engine.sceneManager.load('main');
+            
+            // Start the engine
+            engine.start();
         }
-        
-        // Mouse input handling
-        document.addEventListener('click', (e) => {
-            if (!player) return;
-            
-            const rect = document.getElementById('game-container').getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            fireWeapon(mouseX, mouseY);
-        });
-        
-        // Keyboard input handling
-        document.addEventListener('keydown', (e) => {
-            if (!player) return;
-            
-            switch(e.code) {
-                case 'Digit1':
-                    switchWeapon('laser');
-                    break;
-                case 'Digit2':
-                    switchWeapon('plasma');
-                    break;
-                case 'Digit3':
-                    switchWeapon('missile');
-                    break;
-                case 'KeyR':
-                    // Reload
-                    if (gameState.currentWeapon !== 'laser') {
-                        gameState.ammo = weapons[gameState.currentWeapon].ammo;
-                        updateUI();
-                    }
-                    break;
-                case 'Space':
-                    // Use power-up
-                    if (gameState.powerUps.length > 0) {
-                        const powerUp = gameState.powerUps.shift();
-                        console.log(`Used power-up: ${powerUp}`);
-                        updateUI();
-                    }
-                    break;
-            }
-        });
-        
-        // Game loop for wave timer
-        function gameLoop() {
-            if (gameState.waveTimer > 0) {
-                gameState.waveTimer--;
-                document.getElementById('wave-timer').textContent = gameState.waveTimer;
-            }
-            requestAnimationFrame(gameLoop);
-        }
-        
-        // Initialize game when page loads
-        window.addEventListener('load', () => {
-            console.log('Galaxy Defender loading...');
-            setTimeout(() => {
-                initGame();
-                gameLoop();
-            }, 100);
-        });
+
+        // Start checking for engine
+        checkEngine();
     </script>
 </body>
 </html>

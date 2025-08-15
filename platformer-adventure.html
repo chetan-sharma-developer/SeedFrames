@@ -8,494 +8,263 @@
         body {
             margin: 0;
             padding: 20px;
-            font-family: 'Arial', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-align: center;
-        }
-        
-        .game-container {
-            border: 3px solid #4a90e2;
-            border-radius: 10px;
-            margin: 20px auto;
-            display: inline-block;
-            box-shadow: 0 0 20px rgba(74, 144, 226, 0.5);
-        }
-        
-        .game-info {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px auto;
-            max-width: 800px;
-        }
-        
-        .controls {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .stats {
+            font-family: 'Arial', sans-serif;
             display: flex;
-            justify-content: space-around;
-            margin: 10px 0;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
         }
-        
-        .stat {
-            background: rgba(74, 144, 226, 0.3);
-            padding: 10px;
-            border-radius: 5px;
-            min-width: 100px;
+        #game-container {
+            border: 3px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #000;
         }
-        
         h1 {
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             margin-bottom: 20px;
         }
-        
-        .level-indicator {
-            background: rgba(255, 215, 0, 0.3);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border: 2px solid gold;
+        .controls {
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
     <h1>🏃‍♂️ Platformer Adventure</h1>
-    
-    <div class="game-info">
-        <div class="level-indicator">
-            <strong>Level: <span id="current-level">1</span></strong>
-        </div>
-        
-        <div class="stats">
-            <div class="stat">
-                <strong>Score:</strong><br>
-                <span id="score">0</span>
-            </div>
-            <div class="stat">
-                <strong>Lives:</strong><br>
-                <span id="lives">3</span>
-            </div>
-            <div class="stat">
-                <strong>Coins:</strong><br>
-                <span id="coins">0</span>
-            </div>
-            <div class="stat">
-                <strong>Enemies Defeated:</strong><br>
-                <span id="enemies-defeated">0</span>
-            </div>
-        </div>
-        
-        <div class="controls">
-            <strong>Controls:</strong><br>
-            <strong>WASD</strong> or <strong>Arrow Keys</strong> to move<br>
-            <strong>Space</strong> to jump<br>
-            <strong>E</strong> to attack<br>
-            <strong>R</strong> to restart level
-        </div>
+    <div id="game-container"></div>
+    <div class="controls">
+        <p><strong>Controls:</strong> WASD or Arrow Keys to move, Space to jump</p>
+        <p><strong>Goal:</strong> Collect coins and avoid enemies!</p>
     </div>
-    
-    <div class="game-container" id="game-container"></div>
-    
-    <script src="./src/seedframes.js"></script>
+
+    <script src="src/seedframes.js"></script>
     <script>
-        let engine, scene, player;
-        let gameState = {
-            score: 0,
-            lives: 3,
-            coins: 0,
-            enemiesDefeated: 0,
-            currentLevel: 1,
-            levelCompleted: false
-        };
-        
-        let enemies = [];
-        let coins = [];
-        let platforms = [];
-        let levelData = [];
-        
-        // Level designs
-        const levels = [
-            // Level 1 - Tutorial
-            {
-                platforms: [
-                    {x: 100, y: 500, width: 200, height: 20},
-                    {x: 400, y: 400, width: 150, height: 20},
-                    {x: 650, y: 300, width: 200, height: 20},
-                    {x: 900, y: 200, width: 150, height: 20}
-                ],
-                enemies: [
-                    {x: 450, y: 350, type: 'patrol', patrolDistance: 100}
-                ],
-                coins: [
-                    {x: 450, y: 350}, {x: 700, y: 250}, {x: 950, y: 150}
-                ],
-                goal: {x: 950, y: 150}
-            },
-            // Level 2 - More challenging
-            {
-                platforms: [
-                    {x: 50, y: 550, width: 150, height: 20},
-                    {x: 300, y: 450, width: 120, height: 20},
-                    {x: 550, y: 350, width: 100, height: 20},
-                    {x: 750, y: 250, width: 120, height: 20},
-                    {x: 950, y: 150, width: 150, height: 20}
-                ],
-                enemies: [
-                    {x: 350, y: 400, type: 'patrol', patrolDistance: 80},
-                    {x: 800, y: 200, type: 'patrol', patrolDistance: 60}
-                ],
-                coins: [
-                    {x: 350, y: 400}, {x: 600, y: 300}, {x: 800, y: 200}, {x: 1000, y: 100}
-                ],
-                goal: {x: 1000, y: 100}
-            }
-        ];
-        
-        function initGame() {
-            try {
-                engine = new GameEngine.SeedFrames({
-                    width: 1200,
-                    height: 600,
-                    containerId: 'game-container',
-                    backgroundColor: '#87CEEB',
-                    debug: false
-                });
-                
-                scene = engine.createScene('PlatformerLevel');
-                engine.sceneManager.add('main', scene);
-                engine.sceneManager.load('main');
-                
-                // Setup physics
-                engine.physicsEngine.setCollisionRule('Player', 'Platform', true);
-                engine.physicsEngine.setCollisionRule('Player', 'Enemy', true);
-                engine.physicsEngine.setCollisionRule('Player', 'Coin', true);
-                engine.physicsEngine.setCollisionRule('Player', 'Goal', true);
-                engine.physicsEngine.setCollisionRule('PlayerBullet', 'Enemy', true);
-                
-                // Setup camera
-                scene.camera.follow(player);
-                
-                loadLevel(gameState.currentLevel);
-                
-                engine.start();
-                console.log('Platformer Adventure started!');
-                
-            } catch (error) {
-                console.error('Failed to initialize game:', error);
+        // Wait for engine to load
+        function checkEngine() {
+            if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                initGame();
+            } else {
+                setTimeout(checkEngine, 100);
             }
         }
-        
-        function loadLevel(levelIndex) {
-            if (levelIndex > levels.length) {
-                // Game completed!
-                showGameComplete();
-                return;
-            }
-            
-            // Clear previous level
-            clearLevel();
-            
-            const level = levels[levelIndex - 1];
-            gameState.currentLevel = levelIndex;
-            gameState.levelCompleted = false;
-            
+
+        async function initGame() {
+            const engine = new GameEngine.SeedFrames({
+                width: 800,
+                height: 600,
+                containerId: 'game-container',
+                backgroundColor: '#87CEEB',
+                debug: true
+            });
+
+            // Register SVG assets
+            await engine.assetManagement({
+                assets: {
+                    player: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="48" viewBox="0 0 32 48">
+                            <!-- Head -->
+                            <circle cx="16" cy="12" r="8" fill="#FFB6C1"/>
+                            <!-- Body -->
+                            <rect x="12" y="20" width="8" height="16" fill="#4A90E2"/>
+                            <!-- Arms -->
+                            <rect x="8" y="22" width="4" height="12" fill="#4A90E2"/>
+                            <rect x="20" y="22" width="4" height="12" fill="#4A90E2"/>
+                            <!-- Legs -->
+                            <rect x="12" y="36" width="3" height="12" fill="#2E5C8A"/>
+                            <rect x="17" y="36" width="3" height="12" fill="#2E5C8A"/>
+                            <!-- Eyes -->
+                            <circle cx="14" cy="10" r="1" fill="#000"/>
+                            <circle cx="18" cy="10" r="1" fill="#000"/>
+                        </svg>
+                    `),
+                    platform: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="16" viewBox="0 0 64 16">
+                            <rect width="64" height="16" fill="#8B4513"/>
+                            <rect x="2" y="2" width="60" height="12" fill="#A0522D"/>
+                            <rect x="4" y="4" width="56" height="8" fill="#CD853F"/>
+                        </svg>
+                    `),
+                    coin: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+                            <circle cx="8" cy="8" r="7" fill="#FFD700" stroke="#FFA500" stroke-width="1"/>
+                            <text x="8" y="11" text-anchor="middle" font-size="8" font-weight="bold" fill="#B8860B">$</text>
+                        </svg>
+                    `),
+                    enemy: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" fill="#FF4444"/>
+                            <circle cx="9" cy="9" r="2" fill="#000"/>
+                            <circle cx="15" cy="9" r="2" fill="#000"/>
+                            <path d="M 8 15 Q 12 18 16 15" stroke="#000" stroke-width="2" fill="none"/>
+                            <path d="M 6 6 L 8 4 M 18 6 L 16 4" stroke="#000" stroke-width="1"/>
+                        </svg>
+                    `),
+                    background: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+                            <defs>
+                                <linearGradient id="sky" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#87CEEB"/>
+                                    <stop offset="100%" style="stop-color:#E0F6FF"/>
+                                </linearGradient>
+                            </defs>
+                            <rect width="800" height="600" fill="url(#sky)"/>
+                            <!-- Clouds -->
+                            <circle cx="100" cy="80" r="20" fill="white" opacity="0.8"/>
+                            <circle cx="120" cy="80" r="25" fill="white" opacity="0.8"/>
+                            <circle cx="140" cy="80" r="20" fill="white" opacity="0.8"/>
+                            <circle cx="300" cy="120" r="15" fill="white" opacity="0.8"/>
+                            <circle cx="320" cy="120" r="20" fill="white" opacity="0.8"/>
+                            <circle cx="340" cy="120" r="15" fill="white" opacity="0.8"/>
+                        </svg>
+                    `)
+                }
+            });
+
+            const scene = new GameEngine.Scene('main');
+            engine.sceneManager.add('main', scene);
+
             // Create player
-            player = scene.createGameObject('Player')
-                .at(100, 400)
-                .withColor('#4a90e2', 32, 48)
+            const player = scene.createGameObject('Player')
+                .at(100, 300)
+                .asset('player', 32, 48)
                 .withCollider('box', 32, 48, false, 'Player')
                 .withPlatformerPlayer({
                     speed: 200,
-                    jumpForce: 450,
-                    onJump: () => console.log('Player jumped!')
+                    jumpForce: 400,
+                    gravity: 800,
+                    onJump: () => console.log('Player jumped!'),
+                    onLand: () => console.log('Player landed!')
                 })
                 .build();
-            
-            // Add player components
-            const playerComponent = player.getComponent(GameEngine.PlatformerPlayer);
-            playerComponent.onDeath = () => playerDeath();
-            
+
             // Create platforms
-            level.platforms.forEach((platformData, index) => {
-                const platform = scene.createGameObject(`Platform${index}`)
-                    .at(platformData.x, platformData.y)
-                    .withColor('#8B4513', platformData.width, platformData.height)
-                    .withCollider('box', platformData.width, platformData.height, false, 'Platform')
+            const platforms = [
+                { x: 0, y: 550, width: 200, height: 50 },
+                { x: 250, y: 450, width: 150, height: 50 },
+                { x: 450, y: 350, width: 150, height: 50 },
+                { x: 650, y: 250, width: 150, height: 50 },
+                { x: 100, y: 200, width: 100, height: 50 },
+                { x: 300, y: 150, width: 100, height: 50 },
+                { x: 500, y: 100, width: 100, height: 50 }
+            ];
+
+            platforms.forEach((platform, index) => {
+                scene.createGameObject(`Platform_${index}`)
+                    .at(platform.x + platform.width/2, platform.y + platform.height/2)
+                    .asset('platform', platform.width, platform.height)
+                    .withCollider('box', platform.width, platform.height, false, 'Platform')
                     .build();
-                platforms.push(platform);
             });
-            
-            // Create enemies
-            level.enemies.forEach((enemyData, index) => {
-                const enemy = createEnemy(enemyData, index);
-                enemies.push(enemy);
-            });
-            
+
             // Create coins
-            level.coins.forEach((coinData, index) => {
-                const coin = scene.createGameObject(`Coin${index}`)
-                    .at(coinData.x, coinData.y)
-                    .withColor('#FFD700', 16, 16)
-                    .withCollider('box', 16, 16, true, 'Coin')
+            const coinPositions = [
+                { x: 125, y: 400 },
+                { x: 325, y: 300 },
+                { x: 525, y: 200 },
+                { x: 725, y: 100 },
+                { x: 150, y: 50 }
+            ];
+
+            coinPositions.forEach((pos, index) => {
+                const coin = scene.createGameObject(`Coin_${index}`)
+                    .at(pos.x, pos.y)
+                    .asset('coin', 16, 16)
+                    .withCollider('circle', 16, 16, true, 'Collectible')
                     .build();
-                
-                // Add coin behavior
-                const coinComponent = coin.addComponent(new CoinComponent());
-                coins.push(coin);
+
+                // Add coin collection logic
+                const collider = coin.getComponent(GameEngine.Collider);
+                collider.onCollisionEnter = (other) => {
+                    if (other.getComponent(GameEngine.PlatformerPlayer)) {
+                        coin.destroy();
+                        console.log(`Coin collected! Total: ${scene.findGameObjectsByName('Coin').length}`);
+                    }
+                };
             });
-            
-            // Create goal
-            const goal = scene.createGameObject('Goal')
-                .at(level.goal.x, level.goal.y)
-                .withColor('#00FF00', 32, 32)
-                .withCollider('box', 32, 32, true, 'Goal')
-                .build();
-            
-            // Setup camera
-            scene.camera.follow(player);
-            
-            updateUI();
-        }
-        
-        function createEnemy(enemyData, index) {
-            const enemy = scene.createGameObject(`Enemy${index}`)
-                .at(enemyData.x, enemyData.y)
-                .withColor('#FF4444', 32, 32)
-                .withCollider('box', 32, 32, false, 'Enemy')
-                .build();
-            
-            // Add enemy AI component
-            const enemyAI = enemy.addComponent(new EnemyAIComponent(enemyData));
-            
-            return enemy;
-        }
-        
-        function clearLevel() {
-            // Remove all game objects except the scene
-            if (scene) {
-                const objectsToRemove = [...scene.gameObjects];
-                objectsToRemove.forEach(obj => {
-                    if (obj.name !== 'Scene') {
-                        scene.removeGameObject(obj);
+
+            // Create enemies
+            const enemyPositions = [
+                { x: 300, y: 400 },
+                { x: 600, y: 200 }
+            ];
+
+            enemyPositions.forEach((pos, index) => {
+                const enemy = scene.createGameObject(`Enemy_${index}`)
+                    .at(pos.x, pos.y)
+                    .asset('enemy', 24, 24)
+                    .withCollider('circle', 24, 24, false, 'Enemy')
+                    .build();
+
+                // Simple enemy movement
+                let direction = 1;
+                const moveSpeed = 50;
+                enemy.update = (deltaTime) => {
+                    enemy.transform.position.x += direction * moveSpeed * deltaTime;
+                    if (enemy.transform.position.x > 750 || enemy.transform.position.x < 50) {
+                        direction *= -1;
                     }
-                });
-            }
-            
-            enemies = [];
-            coins = [];
-            platforms = [];
-        }
-        
-        function playerDeath() {
-            gameState.lives--;
-            updateUI();
-            
-            if (gameState.lives <= 0) {
-                gameOver();
-            } else {
-                // Respawn player
-                setTimeout(() => {
-                    loadLevel(gameState.currentLevel);
-                }, 1000);
-            }
-        }
-        
-        function collectCoin(coin) {
-            gameState.coins++;
-            gameState.score += 100;
-            scene.removeGameObject(coin);
-            coins = coins.filter(c => c !== coin);
-            updateUI();
-        }
-        
-        function defeatEnemy(enemy) {
-            gameState.enemiesDefeated++;
-            gameState.score += 200;
-            scene.removeGameObject(enemy);
-            enemies = enemies.filter(e => e !== enemy);
-            updateUI();
-        }
-        
-        function reachGoal() {
-            if (gameState.levelCompleted) return;
-            
-            gameState.levelCompleted = true;
-            gameState.score += 500;
-            updateUI();
-            
-            // Show level complete message
-            setTimeout(() => {
-                if (confirm(`Level ${gameState.currentLevel} completed! Score: ${gameState.score}\nContinue to next level?`)) {
-                    loadLevel(gameState.currentLevel + 1);
-                }
-            }, 500);
-        }
-        
-        function gameOver() {
-            alert(`Game Over! Final Score: ${gameState.score}`);
-            // Reset game
-            gameState = {
-                score: 0,
-                lives: 3,
-                coins: 0,
-                enemiesDefeated: 0,
-                currentLevel: 1,
-                levelCompleted: false
+                };
+
+                // Enemy collision with player
+                const collider = enemy.getComponent(GameEngine.Collider);
+                collider.onCollisionEnter = (other) => {
+                    if (other.getComponent(GameEngine.PlatformerPlayer)) {
+                        console.log('Player hit by enemy!');
+                        // Reset player position
+                        other.transform.position = new GameEngine.Vector2(100, 300);
+                    }
+                };
+            });
+
+            // Add particle system for effects
+            const particleSystem = scene.createGameObject('ParticleSystem')
+                .at(0, 0)
+                .withComponent(new GameEngine.ParticleEmitter())
+                .build();
+
+            const emitter = particleSystem.getComponent(GameEngine.ParticleEmitter);
+            emitter.setExplosionConfig();
+
+            // Add UI
+            const uiSystem = new GameEngine.UISystem();
+            scene.addGameObject(uiSystem);
+
+            const scoreText = new GameEngine.UIText('Score: 0', 20, 20, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(scoreText);
+
+            const livesText = new GameEngine.UIText('Lives: 3', 20, 50, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(livesText);
+
+            // Game state
+            let score = 0;
+            let lives = 3;
+
+            // Update UI
+            scene.update = (deltaTime) => {
+                const remainingCoins = scene.findGameObjectsByName('Coin').length;
+                const totalCoins = coinPositions.length;
+                score = (totalCoins - remainingCoins) * 100;
+                
+                scoreText.text = `Score: ${score}`;
+                livesText.text = `Lives: ${lives}`;
             };
-            loadLevel(1);
+
+            // Load the scene
+            engine.sceneManager.load('main');
+            
+            // Start the engine
+            engine.start();
         }
-        
-        function showGameComplete() {
-            alert(`Congratulations! You've completed all levels!\nFinal Score: ${gameState.score}`);
-            // Reset to level 1
-            gameState.currentLevel = 1;
-            loadLevel(1);
-        }
-        
-        function updateUI() {
-            document.getElementById('score').textContent = gameState.score;
-            document.getElementById('lives').textContent = gameState.lives;
-            document.getElementById('coins').textContent = gameState.coins;
-            document.getElementById('enemies-defeated').textContent = gameState.enemiesDefeated;
-            document.getElementById('current-level').textContent = gameState.currentLevel;
-        }
-        
-        // Custom Components
-        class CoinComponent extends GameEngine.Component {
-            constructor() {
-                super();
-                this.collected = false;
-            }
-            
-            update(deltaTime) {
-                // Rotate coin
-                if (this.gameObject) {
-                    this.gameObject.transform.rotation += deltaTime * 2;
-                }
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name === 'Player' && !this.collected) {
-                    this.collected = true;
-                    collectCoin(this.gameObject);
-                }
-            }
-        }
-        
-        class EnemyAIComponent extends GameEngine.Component {
-            constructor(enemyData) {
-                super();
-                this.startX = enemyData.x;
-                this.patrolDistance = enemyData.patrolDistance || 100;
-                this.direction = 1;
-                this.speed = 50;
-                this.health = 2;
-            }
-            
-            update(deltaTime) {
-                if (!this.gameObject) return;
-                
-                // Simple patrol behavior
-                const currentX = this.gameObject.transform.position.x;
-                const targetX = this.startX + (this.direction * this.patrolDistance);
-                
-                if (Math.abs(currentX - targetX) < 10) {
-                    this.direction *= -1;
-                }
-                
-                this.gameObject.transform.position.x += this.direction * this.speed * deltaTime;
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name === 'Player') {
-                    // Damage player
-                    const playerComponent = other.getComponent(GameEngine.PlatformerPlayer);
-                    if (playerComponent) {
-                        playerComponent.takeDamage(1);
-                    }
-                }
-            }
-            
-            takeDamage(amount) {
-                this.health -= amount;
-                if (this.health <= 0) {
-                    defeatEnemy(this.gameObject);
-                }
-            }
-        }
-        
-        // Input handling
-        document.addEventListener('keydown', (e) => {
-            if (!player) return;
-            
-            switch(e.code) {
-                case 'KeyR':
-                    loadLevel(gameState.currentLevel);
-                    break;
-                case 'KeyE':
-                    // Attack
-                    attack();
-                    break;
-            }
-        });
-        
-        function attack() {
-            if (!player) return;
-            
-            // Create attack projectile
-            const bullet = scene.createGameObject('PlayerBullet')
-                .at(player.transform.position.x, player.transform.position.y)
-                .withColor('#FFFF00', 8, 8)
-                .withCollider('box', 8, 8, false, 'PlayerBullet')
-                .build();
-            
-            // Add bullet behavior
-            bullet.addComponent(new BulletComponent());
-        }
-        
-        class BulletComponent extends GameEngine.Component {
-            constructor() {
-                super();
-                this.speed = 300;
-                this.lifetime = 2.0;
-                this.timer = 0;
-            }
-            
-            update(deltaTime) {
-                if (!this.gameObject) return;
-                
-                // Move bullet
-                this.gameObject.transform.position.x += this.speed * deltaTime;
-                
-                // Check lifetime
-                this.timer += deltaTime;
-                if (this.timer >= this.lifetime) {
-                    scene.removeGameObject(this.gameObject);
-                }
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name.includes('Enemy')) {
-                    const enemyAI = other.getComponent(EnemyAIComponent);
-                    if (enemyAI) {
-                        enemyAI.takeDamage(1);
-                    }
-                    scene.removeGameObject(this.gameObject);
-                }
-            }
-        }
-        
-        // Initialize game when page loads
-        window.addEventListener('load', () => {
-            console.log('Platformer Adventure loading...');
-            setTimeout(initGame, 100);
-        });
+
+        // Start checking for engine
+        checkEngine();
     </script>
 </body>
 </html>

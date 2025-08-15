@@ -3,612 +3,317 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speed Racer - SeedFrames Engine</title>
+    <title>Racing Game - SeedFrames Engine</title>
     <style>
         body {
             margin: 0;
             padding: 20px;
-            font-family: 'Arial', sans-serif;
             background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #game-container {
+            border: 3px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #000;
+        }
+        h1 {
             color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+        }
+        .controls {
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
             text-align: center;
         }
-        
-        .game-container {
-            border: 3px solid #e74c3c;
-            border-radius: 10px;
-            margin: 20px auto;
-            display: inline-block;
-            box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
-        }
-        
-        .game-info {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px auto;
-            max-width: 800px;
-        }
-        
-        .controls {
-            background: rgba(231, 76, 60, 0.3);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .stats {
-            display: flex;
-            justify-content: space-around;
-            margin: 10px 0;
-        }
-        
-        .stat {
-            background: rgba(52, 73, 94, 0.5);
-            padding: 10px;
-            border-radius: 5px;
-            min-width: 120px;
-        }
-        
-        h1 {
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-            margin-bottom: 20px;
-            color: #e74c3c;
-        }
-        
-        .track-selector {
-            background: rgba(52, 152, 219, 0.3);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .lap-info {
-            background: rgba(46, 204, 113, 0.3);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border: 2px solid #2ecc71;
-        }
-        
-        .timer {
-            font-size: 24px;
-            font-weight: bold;
-            color: #f39c12;
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
     </style>
 </head>
 <body>
-    <h1>🏎️ Speed Racer</h1>
-    
-    <div class="game-info">
-        <div class="track-selector">
-            <strong>Track: <span id="current-track">Circuit 1</span></strong>
-            <button onclick="changeTrack(1)">Circuit 1</button>
-            <button onclick="changeTrack(2)">Circuit 2</button>
-            <button onclick="changeTrack(3)">Speedway</button>
-        </div>
-        
-        <div class="lap-info">
-            <strong>Lap: <span id="current-lap">1</span> / <span id="total-laps">3</span></strong>
-            <div class="timer" id="lap-timer">00:00.000</div>
-        </div>
-        
-        <div class="stats">
-            <div class="stat">
-                <strong>Speed:</strong><br>
-                <span id="speed">0</span> km/h
-            </div>
-            <div class="stat">
-                <strong>Best Lap:</strong><br>
-                <span id="best-lap">--:--.---</span>
-            </div>
-            <div class="stat">
-                <strong>Position:</strong><br>
-                <span id="position">1st</span>
-            </div>
-            <div class="stat">
-                <strong>Drift Score:</strong><br>
-                <span id="drift-score">0</span>
-            </div>
-        </div>
-        
-        <div class="game-info" style="margin-top: 20px;">
-            <div class="controls">
-                <strong>Racing Controls:</strong><br>
-                <strong>W/↑</strong> Accelerate | <strong>S/↓</strong> Brake<br>
-                <strong>A/←</strong> Turn Left | <strong>D/→</strong> Turn Right<br>
-                <strong>R</strong> Reset Position
-            </div>
-        </div>
-        
-        <div class="controls">
-            <strong>Controls:</strong><br>
-            <strong>WASD</strong> or <strong>Arrow Keys</strong> to drive<br>
-            <strong>Space</strong> to brake/handbrake<br>
-            <strong>Shift</strong> to boost<br>
-            <strong>R</strong> to reset car
-        </div>
+    <h1>🏎️ Racing Game</h1>
+    <div id="game-container"></div>
+    <div class="controls">
+        <p><strong>Controls:</strong> WASD or Arrow Keys to drive, Space for boost</p>
+        <p><strong>Goal:</strong> Race against AI cars and avoid obstacles!</p>
     </div>
-    
-    <div class="game-container" id="game-container"></div>
-    
-    <script src="./src/seedframes.js"></script>
+
+    <script src="src/seedframes.js"></script>
     <script>
-        let engine, scene, player;
-        let gameState = {
-            currentTrack: 1,
-            currentLap: 1,
-            totalLaps: 3,
-            lapTime: 0,
-            bestLapTime: Infinity,
-            driftScore: 0,
-            boostAvailable: true,
-            checkpoints: []
-        };
-        
-        let aiCars = [];
-        let trackBoundaries = [];
-        let checkpoints = [];
-        let lapStartTime = 0;
-        
-        // Track designs
-        const tracks = [
-            // Circuit 1 - Simple oval
-            {
-                name: "Circuit 1",
-                boundaries: [
-                    {x: 100, y: 100, width: 1000, height: 50}, // Top
-                    {x: 100, y: 450, width: 1000, height: 50}, // Bottom
-                    {x: 100, y: 100, width: 50, height: 400},  // Left
-                    {x: 1050, y: 100, width: 50, height: 400}  // Right
-                ],
-                checkpoints: [
-                    {x: 600, y: 100, width: 20, height: 50},
-                    {x: 600, y: 450, width: 20, height: 50}
-                ],
-                startPosition: {x: 150, y: 250},
-                aiCars: 2
-            },
-            // Circuit 2 - Figure 8
-            {
-                name: "Circuit 2",
-                boundaries: [
-                    {x: 50, y: 50, width: 500, height: 40},   // Top left
-                    {x: 650, y: 50, width: 500, height: 40},  // Top right
-                    {x: 50, y: 510, width: 500, height: 40},  // Bottom left
-                    {x: 650, y: 510, width: 500, height: 40}, // Bottom right
-                    {x: 550, y: 200, width: 40, height: 200}, // Center vertical
-                    {x: 200, y: 250, width: 200, height: 40}  // Center horizontal
-                ],
-                checkpoints: [
-                    {x: 300, y: 50, width: 20, height: 40},
-                    {x: 800, y: 50, width: 20, height: 40},
-                    {x: 300, y: 510, width: 20, height: 40},
-                    {x: 800, y: 510, width: 20, height: 40}
-                ],
-                startPosition: {x: 100, y: 100},
-                aiCars: 3
-            },
-            // Speedway - High speed straight
-            {
-                name: "Speedway",
-                boundaries: [
-                    {x: 50, y: 100, width: 1100, height: 40},  // Top
-                    {x: 50, y: 460, width: 1100, height: 40}, // Bottom
-                    {x: 50, y: 100, width: 40, height: 400},  // Left
-                    {x: 1110, y: 100, width: 40, height: 400} // Right
-                ],
-                checkpoints: [
-                    {x: 300, y: 100, width: 20, height: 40},
-                    {x: 600, y: 100, width: 20, height: 40},
-                    {x: 900, y: 100, width: 20, height: 40}
-                ],
-                startPosition: {x: 100, y: 250},
-                aiCars: 1
-            }
-        ];
-        
-        function initGame() {
-            try {
-                // Check if engine is available
-                if (typeof GameEngine === 'undefined') {
-                    throw new Error('GameEngine not loaded. Please check if seedframes.js is properly loaded.');
-                }
-                
-                if (typeof GameEngine.SeedFrames === 'undefined') {
-                    throw new Error('SeedFrames class not available in GameEngine.');
-                }
-                
-                engine = new GameEngine.SeedFrames({
-                    width: 1200,
-                    height: 600,
-                    containerId: 'game-container',
-                    backgroundColor: '#2c3e50',
-                    debug: false
-                });
-                
-                scene = engine.createScene('RacingTrack');
-                engine.sceneManager.add('main', scene);
-                engine.sceneManager.load('main');
-                
-                // Setup physics
-                engine.physicsEngine.setCollisionRule('Player', 'TrackBoundary', true);
-                engine.physicsEngine.setCollisionRule('Player', 'Checkpoint', true);
-                engine.physicsEngine.setCollisionRule('Player', 'AICar', true);
-                engine.physicsEngine.setCollisionRule('AICar', 'TrackBoundary', true);
-                engine.physicsEngine.setCollisionRule('AICar', 'Checkpoint', true);
-                
-                loadTrack(gameState.currentTrack);
-                
-                engine.start();
-                console.log('Speed Racer started!');
-                
-            } catch (error) {
-                console.error('Failed to initialize game:', error);
-                // Show error to user
-                const container = document.getElementById('game-container');
-                if (container) {
-                    container.innerHTML = `
-                        <div style="color: white; padding: 20px; text-align: center;">
-                            <h3>❌ Game Initialization Failed</h3>
-                            <p>${error.message}</p>
-                            <p>Please check the console for more details.</p>
-                            <button onclick="location.reload()" style="padding: 10px 20px; margin: 10px;">Retry</button>
-                        </div>
-                    `;
-                }
+        // Wait for engine to load
+        function checkEngine() {
+            if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                initGame();
+            } else {
+                setTimeout(checkEngine, 100);
             }
         }
-        
-        function loadTrack(trackIndex) {
-            if (trackIndex < 1 || trackIndex > tracks.length) return;
-            
-            // Clear previous track
-            clearTrack();
-            
-            const track = tracks[trackIndex - 1];
-            gameState.currentTrack = trackIndex;
-            gameState.currentLap = 1;
-            gameState.lapTime = 0;
-            lapStartTime = Date.now();
-            
-            // Create track boundaries
-            track.boundaries.forEach((boundaryData, index) => {
-                const boundary = scene.createGameObject(`Boundary${index}`)
-                    .at(boundaryData.x + boundaryData.width/2, boundaryData.y + boundaryData.height/2)
-                    .withColor('#8B4513', boundaryData.width, boundaryData.height)
-                    .withCollider('box', boundaryData.width, boundaryData.height, false, 'TrackBoundary')
-                    .build();
-                trackBoundaries.push(boundary);
+
+        async function initGame() {
+            const engine = new GameEngine.SeedFrames({
+                width: 800,
+                height: 600,
+                containerId: 'game-container',
+                backgroundColor: '#228B22',
+                debug: true
             });
-            
-            // Create checkpoints
-            track.checkpoints.forEach((checkpointData, index) => {
-                const checkpoint = scene.createGameObject(`Checkpoint${index}`)
-                    .at(checkpointData.x + checkpointData.width/2, checkpointData.y + checkpointData.height/2)
-                    .withColor('#00FF00', checkpointData.width, checkpointData.height)
-                    .withCollider('box', checkpointData.width, checkpointData.height, true, 'Checkpoint')
-                    .build();
-                
-                checkpoint.addComponent(new CheckpointComponent(index));
-                checkpoints.push(checkpoint);
+
+            // Register SVG assets
+            await engine.assetManagement({
+                assets: {
+                    player_car: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="24" viewBox="0 0 48 24">
+                            <!-- Car body -->
+                            <rect x="4" y="8" width="40" height="8" fill="#FF4444" rx="2"/>
+                            <!-- Car top -->
+                            <rect x="12" y="4" width="24" height="6" fill="#CC3333" rx="1"/>
+                            <!-- Wheels -->
+                            <circle cx="12" cy="20" r="4" fill="#333333"/>
+                            <circle cx="36" cy="20" r="4" fill="#333333"/>
+                            <!-- Headlights -->
+                            <circle cx="6" cy="10" r="1" fill="#FFFF00"/>
+                            <circle cx="42" cy="10" r="1" fill="#FFFF00"/>
+                            <!-- Windows -->
+                            <rect x="14" y="5" width="20" height="4" fill="#87CEEB" opacity="0.8"/>
+                        </svg>
+                    `),
+                    ai_car: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="24" viewBox="0 0 48 24">
+                            <!-- Car body -->
+                            <rect x="4" y="8" width="40" height="8" fill="#4444FF" rx="2"/>
+                            <!-- Car top -->
+                            <rect x="12" y="4" width="24" height="6" fill="#3333CC" rx="1"/>
+                            <!-- Wheels -->
+                            <circle cx="12" cy="20" r="4" fill="#333333"/>
+                            <circle cx="36" cy="20" r="4" fill="#333333"/>
+                            <!-- Headlights -->
+                            <circle cx="6" cy="10" r="1" fill="#FFFF00"/>
+                            <circle cx="42" cy="10" r="1" fill="#FFFF00"/>
+                            <!-- Windows -->
+                            <rect x="14" y="5" width="20" height="4" fill="#87CEEB" opacity="0.8"/>
+                        </svg>
+                    `),
+                    obstacle: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                            <rect x="4" y="4" width="24" height="24" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+                            <rect x="8" y="8" width="16" height="16" fill="#A0522D"/>
+                            <rect x="12" y="12" width="8" height="8" fill="#CD853F"/>
+                        </svg>
+                    `),
+                    road: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+                            <!-- Road background -->
+                            <rect width="800" height="600" fill="#696969"/>
+                            <!-- Road markings -->
+                            <rect x="0" y="0" width="800" height="600" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-dasharray="50,50"/>
+                            <!-- Side lines -->
+                            <rect x="0" y="0" width="800" height="8" fill="#FFFFFF"/>
+                            <rect x="0" y="592" width="800" height="8" fill="#FFFFFF"/>
+                        </svg>
+                    `),
+                    boost_particle: GameEngine.SVG(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">
+                            <circle cx="4" cy="4" r="3" fill="#FF6600"/>
+                            <circle cx="4" cy="4" r="1" fill="#FFFF00"/>
+                        </svg>
+                    `)
+                }
             });
-            
+
+            const scene = new GameEngine.Scene('main');
+            engine.sceneManager.add('main', scene);
+
             // Create player car
-            player = scene.createGameObject('PlayerCar')
-                .at(track.startPosition.x, track.startPosition.y)
-                .withColor('#e74c3c', 40, 20)
-                .withCollider('box', 40, 20, false, 'Player')
+            const player = scene.createGameObject('Player')
+                .at(200, 500)
+                .asset('player_car', 48, 24)
+                .withCollider('box', 48, 24, false, 'Player')
                 .withRacingPlayer({
-                    speed: 300,
-                    acceleration: 800,
-                    maxSpeed: 400,
-                    handling: 180,
-                    driftFactor: 0.8
+                    maxSpeed: 300,
+                    acceleration: 200,
+                    deceleration: 150,
+                    turnSpeed: 180,
+                    onDrift: () => console.log('Player drifting!')
                 })
                 .build();
-            
-            // Add racing components
-            const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-            if (racingComponent && typeof racingComponent.onDrift !== 'undefined') {
-                racingComponent.onDrift = (driftIntensity) => {
-                    gameState.driftScore += Math.floor(driftIntensity * 10);
-                    updateUI();
-                };
-            }
-            
+
             // Create AI cars
-            for (let i = 0; i < track.aiCars; i++) {
-                createAICar(i, track);
-            }
-            
-            // Setup camera
-            scene.camera.follow(player);
-            
-            updateUI();
-        }
-        
-        function createAICar(index, track) {
-            const aiCar = scene.createGameObject(`AICar${index}`)
-                .at(track.startPosition.x + (index + 1) * 60, track.startPosition.y)
-                .withColor('#3498db', 40, 20)
-                .withCollider('box', 40, 20, false, 'AICar')
+            const aiCars = [
+                { x: 150, y: 400, speed: 120 },
+                { x: 300, y: 300, speed: 140 },
+                { x: 450, y: 200, speed: 160 }
+            ];
+
+            aiCars.forEach((aiData, index) => {
+                const aiCar = scene.createGameObject(`AI_Car_${index}`)
+                    .at(aiData.x, aiData.y)
+                    .asset('ai_car', 48, 24)
+                    .withCollider('box', 48, 24, false, 'AI')
+                    .withComponent(new AIDrivingComponent(aiData.speed))
+                    .build();
+            });
+
+            // Create obstacles
+            const obstacles = [
+                { x: 100, y: 150 },
+                { x: 400, y: 100 },
+                { x: 600, y: 250 },
+                { x: 200, y: 350 }
+            ];
+
+            obstacles.forEach((obstacle, index) => {
+                scene.createGameObject(`Obstacle_${index}`)
+                    .at(obstacle.x, obstacle.y)
+                    .asset('obstacle', 32, 32)
+                    .withCollider('box', 32, 32, false, 'Obstacle')
+                    .build();
+            });
+
+            // Create road background
+            scene.createGameObject('Road')
+                .at(400, 300)
+                .asset('road', 800, 600)
                 .build();
-            
-            // Add AI driving component
-            aiCar.addComponent(new AIDrivingComponent(track, index));
-            aiCars.push(aiCar);
-        }
-        
-        function clearTrack() {
-            // Remove all track objects
-            if (scene) {
-                const objectsToRemove = [...scene.gameObjects];
-                objectsToRemove.forEach(obj => {
-                    if (obj.name !== 'Scene') {
-                        scene.removeGameObject(obj);
-                    }
-                });
-            }
-            
-            trackBoundaries = [];
-            checkpoints = [];
-            aiCars = [];
-        }
-        
-        function changeTrack(trackIndex) {
-            loadTrack(trackIndex);
-        }
-        
-        function updateUI() {
-            document.getElementById('current-track').textContent = tracks[gameState.currentTrack - 1].name;
-            document.getElementById('current-lap').textContent = gameState.currentLap;
-            document.getElementById('total-laps').textContent = gameState.totalLaps;
-            document.getElementById('drift-score').textContent = gameState.driftScore;
-            
-            // Update speed
-            if (player) {
-                const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-                if (racingComponent && typeof racingComponent.getSpeed === 'function') {
-                    const speed = Math.round(racingComponent.getSpeed() * 3.6); // Convert to km/h
-                    document.getElementById('speed').textContent = speed;
-                } else {
-                    document.getElementById('speed').textContent = '0';
-                }
-            }
-            
-            // Update best lap time
-            if (gameState.bestLapTime !== Infinity) {
-                document.getElementById('best-lap').textContent = formatTime(gameState.bestLapTime);
-            }
-        }
-        
-        function formatTime(timeMs) {
-            const totalSeconds = Math.floor(timeMs / 1000);
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            const milliseconds = Math.floor((timeMs % 1000) / 10);
-            
-            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
-        }
-        
-        function updateLapTimer() {
-            const currentTime = Date.now();
-            gameState.lapTime = currentTime - lapStartTime;
-            
-            document.getElementById('lap-timer').textContent = formatTime(gameState.lapTime);
-        }
-        
-        function completeLap() {
-            const lapTime = gameState.lapTime;
-            
-            // Check if it's a new best lap
-            if (lapTime < gameState.bestLapTime) {
-                gameState.bestLapTime = lapTime;
-                console.log('New best lap time!');
-            }
-            
-            gameState.currentLap++;
-            
-            if (gameState.currentLap > gameState.totalLaps) {
-                // Race completed
-                showRaceComplete();
-            } else {
-                // Start next lap
-                lapStartTime = Date.now();
-                console.log(`Lap ${gameState.currentLap} started!`);
-            }
-            
-            updateUI();
-        }
-        
-        function showRaceComplete() {
-            const totalTime = Date.now() - (lapStartTime - gameState.lapTime);
-            const finalTime = formatTime(totalTime);
-            
-            alert(`Race completed!\nTotal time: ${finalTime}\nBest lap: ${formatTime(gameState.bestLapTime)}\nDrift score: ${gameState.driftScore}`);
-            
-            // Reset race
-            loadTrack(gameState.currentTrack);
-        }
-        
-        // Custom Components
-        class CheckpointComponent extends GameEngine.Component {
-            constructor(checkpointIndex) {
-                super();
-                this.checkpointIndex = checkpointIndex;
-                this.activated = false;
-            }
-            
-            onCollisionEnter(other) {
-                if (other.name === 'PlayerCar' && !this.activated) {
-                    this.activated = true;
-                    console.log(`Checkpoint ${this.checkpointIndex} reached!`);
-                    
-                    // Check if lap is complete
-                    if (this.checkpointIndex === 0 && gameState.currentLap > 1) {
-                        completeLap();
-                    }
-                }
-            }
-        }
-        
-        class AIDrivingComponent extends GameEngine.Component {
-            constructor(track, carIndex) {
-                super();
-                this.track = track;
-                this.carIndex = carIndex;
-                this.currentCheckpoint = 0;
-                this.speed = 200 + (carIndex * 20);
-                this.acceleration = 600;
-                this.maxSpeed = 300 + (carIndex * 30);
-                this.handling = 150;
-                this.targetPosition = new GameEngine.Vector2(0, 0);
-                this.updateTarget();
-            }
-            
-            update(deltaTime) {
-                if (!this.gameObject) return;
+
+            // Add particle system for boost effects
+            const particleSystem = scene.createGameObject('ParticleSystem')
+                .at(0, 0)
+                .withComponent(new GameEngine.ParticleEmitter())
+                .build();
+
+            const emitter = particleSystem.getComponent(GameEngine.ParticleEmitter);
+            emitter.setSmokeConfig();
+
+            // Add UI
+            const uiSystem = new GameEngine.UISystem();
+            scene.addGameObject(uiSystem);
+
+            const speedText = new GameEngine.UIText('Speed: 0 km/h', 20, 20, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(speedText);
+
+            const boostText = new GameEngine.UIText('Boost: Ready', 20, 50, '#FFFFFF', '20px Arial');
+            uiSystem.addElement(boostText);
+
+            // Game state
+            let boostAvailable = true;
+            let boostCooldown = 0;
+
+            // Input handling
+            const keys = {};
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
                 
-                // Simple AI: move towards next checkpoint
-                const direction = this.targetPosition.subtract(this.gameObject.transform.position);
-                const distance = direction.magnitude();
-                
-                if (distance < 50) {
-                    // Reached checkpoint, move to next
-                    this.currentCheckpoint = (this.currentCheckpoint + 1) % this.track.checkpoints.length;
-                    this.updateTarget();
-                }
-                
-                if (distance > 10) {
-                    // Move towards target
-                    const normalizedDirection = direction.normalize();
-                    const targetSpeed = Math.min(this.speed, this.maxSpeed);
-                    
-                    // Simple movement without Rigidbody
-                    const moveSpeed = targetSpeed * deltaTime;
-                    this.gameObject.transform.position.x += normalizedDirection.x * moveSpeed;
-                    this.gameObject.transform.position.y += normalizedDirection.y * moveSpeed;
-                    
-                    // Rotate towards target
-                    const targetAngle = Math.atan2(normalizedDirection.y, normalizedDirection.x);
-                    this.gameObject.transform.rotation = targetAngle;
-                }
-            }
-            
-            updateTarget() {
-                if (this.track.checkpoints[this.currentCheckpoint]) {
-                    const checkpoint = this.track.checkpoints[this.currentCheckpoint];
-                    this.targetPosition = new GameEngine.Vector2(
-                        checkpoint.x + checkpoint.width/2,
-                        checkpoint.y + checkpoint.height/2
-                    );
-                }
-            }
-        }
-        
-        // Input handling
-        document.addEventListener('keydown', (e) => {
-            if (!player) return;
-            
-            const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-            if (!racingComponent) return;
-            
-            switch(e.code) {
-                case 'KeyW':
-                case 'ArrowUp':
-                    racingComponent.accelerate(1.0);
-                    break;
-                case 'KeyS':
-                case 'ArrowDown':
-                    racingComponent.brake(1.0);
-                    break;
-                case 'KeyA':
-                case 'ArrowLeft':
-                    racingComponent.steer(-1.0);
-                    break;
-                case 'KeyD':
-                case 'ArrowRight':
-                    racingComponent.steer(1.0);
-                    break;
-                case 'KeyR':
-                    // Reset car position
-                    const track = tracks[gameState.currentTrack - 1];
-                    player.transform.position.x = track.startPosition.x;
-                    player.transform.position.y = track.startPosition.y;
-                    player.transform.rotation = 0;
-                    
-                    // Reset racing component if available
-                    if (typeof racingComponent.setVelocity === 'function') {
-                        racingComponent.setVelocity(new GameEngine.Vector2(0, 0));
+                if (e.code === 'Space' && boostAvailable) {
+                    const racingComponent = player.getComponent(GameEngine.RacingPlayer);
+                    if (racingComponent) {
+                        racingComponent.setBoost(2.0, 1.0);
+                        boostAvailable = false;
+                        boostCooldown = 3.0;
+                        boostText.text = 'Boost: Cooldown';
                     }
-                    break;
-            }
-        });
-        
-        // Handle key release
-        document.addEventListener('keyup', (e) => {
-            if (!player) return;
-            
-            const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-            if (!racingComponent) return;
-            
-            switch(e.code) {
-                case 'KeyW':
-                case 'ArrowUp':
-                case 'KeyS':
-                case 'ArrowDown':
-                    racingComponent.targetSpeed = 0;
-                    break;
-                case 'KeyA':
-                case 'ArrowLeft':
-                case 'KeyD':
-                case 'ArrowRight':
-                    racingComponent.steeringAngle = 0;
-                    break;
-            }
-        });
-        
-        // Game loop for timer updates
-        function gameLoop() {
-            updateLapTimer();
-            
-            // Update racing components
-            if (player) {
-                const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-                if (racingComponent && typeof racingComponent.update === 'function') {
-                    racingComponent.update(0.016); // Assuming 60 FPS
-                }
-            }
-            
-            // Update AI cars
-            aiCars.forEach(aiCar => {
-                const aiComponent = aiCar.getComponent(AIDrivingComponent);
-                if (aiComponent && typeof aiComponent.update === 'function') {
-                    aiComponent.update(0.016);
                 }
             });
-            
-            requestAnimationFrame(gameLoop);
-        }
-        
-        // Initialize game when page loads
-        window.addEventListener('load', () => {
-            console.log('Speed Racer loading...');
-            // Wait for engine to be ready
-            const checkEngine = () => {
-                if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
-                    console.log('Engine ready, initializing game...');
-                    initGame();
-                    gameLoop();
-                } else {
-                    console.log('Engine not ready yet, waiting...');
-                    setTimeout(checkEngine, 100);
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+
+            // Game loop update
+            const gameLoop = (deltaTime) => {
+                const racingComponent = player.getComponent(GameEngine.RacingPlayer);
+                if (racingComponent) {
+                    // Handle input
+                    if (keys['KeyW'] || keys['ArrowUp']) {
+                        racingComponent.accelerate(1.0);
+                    }
+                    if (keys['KeyS'] || keys['ArrowDown']) {
+                        racingComponent.brake(1.0);
+                    }
+                    if (keys['KeyA'] || keys['ArrowLeft']) {
+                        racingComponent.steer(-1.0);
+                    }
+                    if (keys['KeyD'] || keys['ArrowRight']) {
+                        racingComponent.steer(1.0);
+                    }
+
+                    // Update boost cooldown
+                    if (!boostAvailable) {
+                        boostCooldown -= deltaTime;
+                        if (boostCooldown <= 0) {
+                            boostAvailable = true;
+                            boostText.text = 'Boost: Ready';
+                        }
+                    }
+
+                    // Update UI
+                    const speedKmh = Math.round(racingComponent.getSpeedKmh());
+                    speedText.text = `Speed: ${speedKmh} km/h`;
+
+                    // Update components
+                    racingComponent.update(deltaTime);
                 }
+
+                // Update AI cars
+                scene.findGameObjectsByName('AI_Car').forEach(aiCar => {
+                    const aiComponent = aiCar.getComponent(AIDrivingComponent);
+                    if (aiComponent) {
+                        aiComponent.update(deltaTime);
+                    }
+                });
             };
-            checkEngine();
-        });
+
+            // Add game loop to scene
+            scene.update = gameLoop;
+
+            // Load the scene
+            engine.sceneManager.load('main');
+            
+            // Start the engine
+            engine.start();
+        }
+
+        // AI Driving Component
+        class AIDrivingComponent extends GameEngine.Component {
+            constructor(targetSpeed = 100) {
+                super();
+                this.targetSpeed = targetSpeed;
+                this.currentSpeed = 0;
+                this.direction = new GameEngine.Vector2(0, -1); // Drive upward
+            }
+
+            update(deltaTime) {
+                if (!this.gameObject) return;
+
+                // Simple AI: drive upward at target speed
+                const moveSpeed = this.targetSpeed * deltaTime;
+                this.gameObject.transform.position.x += this.direction.x * moveSpeed;
+                this.gameObject.transform.position.y += this.direction.y * moveSpeed;
+
+                // Wrap around screen
+                if (this.gameObject.transform.position.y < -50) {
+                    this.gameObject.transform.position.y = 650;
+                    this.gameObject.transform.position.x = Math.random() * 700 + 50;
+                }
+            }
+        }
+
+        // Start checking for engine
+        checkEngine();
     </script>
 </body>
 </html>
