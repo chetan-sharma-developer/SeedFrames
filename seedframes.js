@@ -98,7 +98,27 @@ class EventBus {
 
 class Debug {
   static enabled = false;
-
+  static showOverlay = false;
+  static showFPS = true;
+  static showStats = true;
+  static showProfiler = true;
+  static showQuadtree = false;
+  
+  // Performance tracking
+  static frameCount = 0;
+  static lastTime = 0;
+  static fps = 0;
+  static frameTimes = [];
+  static updateTimes = [];
+  static renderTimes = [];
+  static collisionChecks = 0;
+  static activeObjects = 0;
+  static memoryUsage = 0;
+  
+  // Profiling
+  static profilerData = new Map();
+  static profilerStartTime = 0;
+  
   static log(...args) {
     if (this.enabled) {
       console.log("[DEBUG]", ...args);
@@ -127,6 +147,209 @@ class Debug {
       bounds.bottom - bounds.top
     );
     ctx.restore();
+  }
+  
+  // Performance tracking methods
+  static updateFPS(currentTime) {
+    this.frameCount++;
+    
+    if (currentTime - this.lastTime >= 1000) {
+      this.fps = this.frameCount;
+      this.frameCount = 0;
+      this.lastTime = currentTime;
+      
+      // Keep only last 60 frame times for averaging
+      if (this.frameTimes.length > 60) {
+        this.frameTimes.shift();
+      }
+    }
+  }
+  
+  static addFrameTime(frameTime) {
+    this.frameTimes.push(frameTime);
+    if (this.frameTimes.length > 60) {
+      this.frameTimes.shift();
+    }
+  }
+  
+  static addUpdateTime(updateTime) {
+    this.updateTimes.push(updateTime);
+    if (this.updateTimes.length > 60) {
+      this.updateTimes.shift();
+    }
+  }
+  
+  static addRenderTime(renderTime) {
+    this.renderTimes.push(renderTime);
+    if (this.renderTimes.length > 60) {
+      this.renderTimes.shift();
+    }
+  }
+  
+  static getAverageFrameTime() {
+    if (this.frameTimes.length === 0) return 0;
+    return this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
+  }
+  
+  static getAverageUpdateTime() {
+    if (this.updateTimes.length === 0) return 0;
+    return this.updateTimes.reduce((a, b) => a + b, 0) / this.updateTimes.length;
+  }
+  
+  static getAverageRenderTime() {
+    if (this.renderTimes.length === 0) return 0;
+    return this.renderTimes.reduce((a, b) => a + b, 0) / this.renderTimes.length;
+  }
+  
+  // Profiling methods
+  static startProfile(name) {
+    if (!this.enabled) return;
+    this.profilerData.set(name, { start: performance.now() });
+  }
+  
+  static endProfile(name) {
+    if (!this.enabled) return;
+    const data = this.profilerData.get(name);
+    if (data) {
+      data.duration = performance.now() - data.start;
+      data.count = (data.count || 0) + 1;
+      data.average = data.average || 0;
+      data.average = (data.average * (data.count - 1) + data.duration) / data.count;
+    }
+  }
+  
+  // Debug overlay drawing
+  static drawOverlay(ctx, engine, scene) {
+    if (!this.showOverlay || !this.enabled) return;
+    
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(10, 10, 300, 200);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    
+    let y = 20;
+    const lineHeight = 16;
+    
+    if (this.showFPS) {
+      ctx.fillText(`FPS: ${this.fps}`, 20, y);
+      y += lineHeight;
+      ctx.fillText(`Frame Time: ${this.getAverageFrameTime().toFixed(2)}ms`, 20, y);
+      y += lineHeight;
+    }
+    
+    if (this.showStats) {
+      ctx.fillText(`Active Objects: ${this.activeObjects}`, 20, y);
+      y += lineHeight;
+      ctx.fillText(`Collision Checks: ${this.collisionChecks}`, 20, y);
+      y += lineHeight;
+      ctx.fillText(`Memory: ${this.memoryUsage}MB`, 20, y);
+      y += lineHeight;
+    }
+    
+    if (this.showProfiler) {
+      ctx.fillText('Profiler:', 20, y);
+      y += lineHeight;
+      
+      for (const [name, data] of this.profilerData) {
+        if (data.average) {
+          ctx.fillText(`${name}: ${data.average.toFixed(2)}ms`, 30, y);
+          y += lineHeight;
+        }
+      }
+    }
+    
+    // Scene info
+    if (scene) {
+      ctx.fillText(`Scene: ${scene.name}`, 20, y);
+      y += lineHeight;
+      ctx.fillText(`Camera: (${scene.camera.transform.position.x.toFixed(1)}, ${scene.camera.transform.position.y.toFixed(1)})`, 20, y);
+    }
+    
+    ctx.restore();
+  }
+  
+  // Quadtree visualization
+  static drawQuadtree(ctx, quadtree, camera) {
+    if (!this.showQuadtree || !this.enabled || !quadtree) return;
+    
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.lineWidth = 1;
+    
+    this.drawQuadtreeNode(ctx, quadtree, camera);
+    
+    ctx.restore();
+  }
+  
+  static drawQuadtreeNode(ctx, node, camera) {
+    if (!node) return;
+    
+    // Convert world coordinates to screen coordinates
+    const screenBounds = {
+      x: node.bounds.x - camera.transform.position.x + camera.width / 2,
+      y: node.bounds.y - camera.transform.position.y + camera.height / 2,
+      width: node.bounds.width,
+      height: node.bounds.height
+    };
+    
+    // Only draw if visible on screen
+    if (screenBounds.x + screenBounds.width > 0 && screenBounds.x < camera.width &&
+        screenBounds.y + screenBounds.height > 0 && screenBounds.y < camera.height) {
+      
+      ctx.strokeRect(screenBounds.x, screenBounds.y, screenBounds.width, screenBounds.height);
+      
+      // Draw object count
+      if (node.objects.length > 0) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.font = '10px monospace';
+        ctx.fillText(node.objects.length.toString(), 
+                    screenBounds.x + screenBounds.width / 2, 
+                    screenBounds.y + screenBounds.height / 2);
+      }
+      
+      // Recursively draw child nodes
+      if (node.divided) {
+        for (const childNode of node.nodes) {
+          this.drawQuadtreeNode(ctx, childNode, camera);
+        }
+      }
+    }
+  }
+  
+  // Toggle methods
+  static toggleOverlay() {
+    this.showOverlay = !this.showOverlay;
+  }
+  
+  static toggleFPS() {
+    this.showFPS = !this.showFPS;
+  }
+  
+  static toggleStats() {
+    this.showStats = !this.showStats;
+  }
+  
+  static toggleProfiler() {
+    this.showProfiler = !this.showProfiler;
+  }
+  
+  static toggleQuadtree() {
+    this.showQuadtree = !this.showQuadtree;
+  }
+  
+  // Reset stats
+  static resetStats() {
+    this.frameTimes = [];
+    this.updateTimes = [];
+    this.renderTimes = [];
+    this.collisionChecks = 0;
+    this.activeObjects = 0;
+    this.memoryUsage = 0;
+    this.profilerData.clear();
   }
 }
 
@@ -558,6 +781,20 @@ class SpriteRenderer extends Component {
     this.alpha = 1.0;
     this.flipX = false;
     this.flipY = false;
+    
+    // Animation properties
+    this.animations = new Map();
+    this.currentAnimation = null;
+    this.currentFrame = 0;
+    this.frameTimer = 0;
+    this.frameDuration = 0.1; // seconds per frame
+    this.looping = true;
+    this.playing = false;
+    
+    // Skeletal animation properties
+    this.bones = [];
+    this.skeleton = null;
+    this.boneTransforms = new Map();
   }
 
   awake() {
@@ -616,6 +853,195 @@ class SpriteRenderer extends Component {
     this.color = color;
     this.image = null;
     this.loaded = true;
+  }
+  
+  // Animation methods
+  addAnimation(name, frames, frameDuration = 0.1, loop = true) {
+    this.animations.set(name, {
+      frames: frames,
+      frameDuration: frameDuration,
+      loop: loop
+    });
+  }
+  
+  playAnimation(name, reset = true) {
+    if (!this.animations.has(name)) return false;
+    
+    const animation = this.animations.get(name);
+    this.currentAnimation = name;
+    this.frameDuration = animation.frameDuration;
+    this.looping = animation.loop;
+    this.playing = true;
+    
+    if (reset) {
+      this.currentFrame = 0;
+      this.frameTimer = 0;
+    }
+    
+    return true;
+  }
+  
+  stopAnimation() {
+    this.playing = false;
+  }
+  
+  pauseAnimation() {
+    this.playing = false;
+  }
+  
+  resumeAnimation() {
+    this.playing = true;
+  }
+  
+  update(deltaTime) {
+    if (!this.playing || !this.currentAnimation) return;
+    
+    this.frameTimer += deltaTime;
+    if (this.frameTimer >= this.frameDuration) {
+      this.frameTimer = 0;
+      this.currentFrame++;
+      
+      const animation = this.animations.get(this.currentAnimation);
+      if (this.currentFrame >= animation.frames.length) {
+        if (this.looping) {
+          this.currentFrame = 0;
+        } else {
+          this.currentFrame = animation.frames.length - 1;
+          this.playing = false;
+        }
+      }
+    }
+  }
+  
+  // Skeletal animation methods
+  setSkeleton(skeleton) {
+    this.skeleton = skeleton;
+    this.bones = skeleton.bones;
+    this.updateBoneTransforms();
+  }
+  
+  addBone(name, parent = null, localTransform = null) {
+    const bone = {
+      name: name,
+      parent: parent,
+      localTransform: localTransform || { position: new Vector2(0, 0), rotation: 0, scale: new Vector2(1, 1) },
+      worldTransform: { position: new Vector2(0, 0), rotation: 0, scale: new Vector2(1, 1) }
+    };
+    
+    this.bones.push(bone);
+    this.updateBoneTransforms();
+    return bone;
+  }
+  
+  updateBoneTransforms() {
+    for (const bone of this.bones) {
+      this.updateBoneWorldTransform(bone);
+    }
+  }
+  
+  updateBoneWorldTransform(bone) {
+    if (bone.parent) {
+      const parentTransform = this.boneTransforms.get(bone.parent.name) || bone.parent.worldTransform;
+      bone.worldTransform.position = parentTransform.position.add(bone.localTransform.position);
+      bone.worldTransform.rotation = parentTransform.rotation + bone.localTransform.rotation;
+      bone.worldTransform.scale = parentTransform.scale.multiplyByScalar(bone.localTransform.scale.x);
+    } else {
+      bone.worldTransform = { ...bone.localTransform };
+    }
+    
+    this.boneTransforms.set(bone.name, bone.worldTransform);
+  }
+  
+  animateBone(name, targetTransform, duration = 1.0) {
+    const bone = this.bones.find(b => b.name === name);
+    if (!bone) return;
+    
+    // Simple linear interpolation for bone animation
+    const startTransform = { ...bone.localTransform };
+    const timer = new Timer(duration, () => {
+      bone.localTransform = targetTransform;
+      this.updateBoneTransforms();
+    });
+    
+    // Store animation timer for cleanup
+    if (!this.boneAnimations) this.boneAnimations = [];
+    this.boneAnimations.push(timer);
+  }
+  
+  // Enhanced draw method for animations
+  draw(ctx, camera) {
+    if (!this.gameObject) return;
+
+    const pos = this.gameObject.transform.position;
+    const scale = this.gameObject.transform.scale;
+
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(this.gameObject.transform.rotation);
+    ctx.scale(scale.x * (this.flipX ? -1 : 1), scale.y * (this.flipY ? -1 : 1));
+
+    if (this.loaded && this.image) {
+      // Draw current animation frame or static image
+      if (this.currentAnimation && this.playing) {
+        const animation = this.animations.get(this.currentAnimation);
+        const frame = animation.frames[this.currentFrame];
+        
+        if (frame.spriteSheet) {
+          // Sprite sheet animation
+          ctx.drawImage(
+            frame.spriteSheet,
+            frame.x, frame.y, frame.width, frame.height,
+            -this.width / 2, -this.height / 2,
+            this.width, this.height
+          );
+        } else if (frame.image) {
+          // Individual frame images
+          ctx.drawImage(
+            frame.image,
+            -this.width / 2, -this.height / 2,
+            this.width, this.height
+          );
+        }
+      } else {
+        // Draw static image
+        ctx.drawImage(
+          this.image,
+          -this.width / 2, -this.height / 2,
+          this.width, this.height
+        );
+      }
+      
+      // Draw skeletal bones if skeleton exists
+      if (this.skeleton && Debug.enabled) {
+        this.drawSkeleton(ctx);
+      }
+    } else if (this.color) {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+    } else {
+      ctx.fillStyle = "#888888";
+      ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+    }
+
+    ctx.restore();
+  }
+  
+  drawSkeleton(ctx) {
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 2;
+    
+    for (const bone of this.bones) {
+      if (bone.parent) {
+        const parentPos = bone.parent.worldTransform.position;
+        const bonePos = bone.worldTransform.position;
+        
+        ctx.beginPath();
+        ctx.moveTo(parentPos.x, parentPos.y);
+        ctx.lineTo(bonePos.x, bonePos.y);
+        ctx.stroke();
+      }
+    }
   }
 }
 
@@ -683,11 +1109,56 @@ class AudioSource extends Component {
     this.volume = volume;
     this.loop = loop;
     this.loaded = false;
+    
+    // Advanced audio properties
+    this.pitch = 1.0;
+    this.pan = 0.0; // -1.0 (left) to 1.0 (right)
+    this.spatial = false;
+    this.maxDistance = 1000;
+    this.rolloffFactor = 1.0;
+    this.referenceDistance = 100;
+    
+    // Fade properties
+    this.fadeInTime = 0;
+    this.fadeOutTime = 0;
+    this.fadeTimer = 0;
+    this.fadeType = 'none'; // 'none', 'in', 'out'
+    
+    // Audio context for advanced features
+    this.audioContext = null;
+    this.gainNode = null;
+    this.stereoPanner = null;
+    this.sourceNode = null;
+    
+    // Spatial audio properties
+    this.listener = null; // Camera or player reference
+    this.spatialVolume = 1.0;
   }
 
   awake() {
     if (this.audioSrc) {
       this.loadAudio(this.audioSrc);
+    }
+    
+    // Initialize Web Audio API if available
+    this.initWebAudioAPI();
+  }
+  
+  initWebAudioAPI() {
+    try {
+      if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+        this.audioContext = new (AudioContext || webkitAudioContext)();
+        this.gainNode = this.audioContext.createGain();
+        this.stereoPanner = this.audioContext.createStereoPanner();
+        
+        this.gainNode.connect(this.stereoPanner);
+        this.stereoPanner.connect(this.audioContext.destination);
+        
+        this.gainNode.gain.value = this.volume;
+        this.stereoPanner.pan.value = this.pan;
+      }
+    } catch (error) {
+      Debug.warn('Web Audio API not available, falling back to HTML5 Audio');
     }
   }
 
@@ -696,6 +1167,11 @@ class AudioSource extends Component {
     this.audio.oncanplaythrough = () => {
       this.loaded = true;
       Debug.log(`Audio loaded: ${src}`);
+      
+      // Create audio source node if Web Audio API is available
+      if (this.audioContext && this.audio) {
+        this.createAudioSource();
+      }
     };
     this.audio.onerror = () => {
       Debug.error(`Failed to load audio: ${src}`);
@@ -704,24 +1180,190 @@ class AudioSource extends Component {
     this.audio.loop = this.loop;
     this.audio.src = src;
   }
+  
+  createAudioSource() {
+    if (!this.audioContext || !this.audio) return;
+    
+    try {
+      // Create audio source from HTML5 audio element
+      this.sourceNode = this.audioContext.createMediaElementSource(this.audio);
+      this.sourceNode.connect(this.gainNode);
+    } catch (error) {
+      Debug.warn('Failed to create audio source node:', error);
+    }
+  }
 
   play() {
     if (this.loaded && this.audio) {
       this.audio.currentTime = 0;
+      
+      if (this.fadeInTime > 0) {
+        this.startFadeIn();
+      }
+      
       this.audio.play().catch((e) => Debug.error("Audio play failed:", e));
     }
   }
 
   stop() {
     if (this.audio) {
-      this.audio.pause();
-      this.audio.currentTime = 0;
+      if (this.fadeOutTime > 0) {
+        this.startFadeOut();
+      } else {
+        this.audio.pause();
+        this.audio.currentTime = 0;
+      }
     }
   }
 
   pause() {
     if (this.audio) {
       this.audio.pause();
+    }
+  }
+  
+  // Advanced audio controls
+  setVolume(volume) {
+    this.volume = Math.max(0, Math.min(1, volume));
+    if (this.audio) {
+      this.audio.volume = this.volume;
+    }
+    if (this.gainNode) {
+      this.gainNode.gain.value = this.volume;
+    }
+  }
+  
+  setPitch(pitch) {
+    this.pitch = Math.max(0.1, Math.min(4, pitch));
+    if (this.audio) {
+      this.audio.playbackRate = this.pitch;
+    }
+  }
+  
+  setPan(pan) {
+    this.pan = Math.max(-1, Math.min(1, pan));
+    if (this.stereoPanner) {
+      this.stereoPanner.pan.value = this.pan;
+    }
+  }
+  
+  // Fade controls
+  fadeIn(duration) {
+    this.fadeInTime = duration;
+    this.fadeType = 'in';
+    this.fadeTimer = 0;
+    this.setVolume(0);
+  }
+  
+  fadeOut(duration) {
+    this.fadeOutTime = duration;
+    this.fadeType = 'out';
+    this.fadeTimer = 0;
+  }
+  
+  startFadeIn() {
+    this.fadeType = 'in';
+    this.fadeTimer = 0;
+    this.setVolume(0);
+  }
+  
+  startFadeOut() {
+    this.fadeType = 'out';
+    this.fadeTimer = 0;
+  }
+  
+  // Spatial audio
+  setSpatial(enabled, maxDistance = 1000, rolloffFactor = 1.0) {
+    this.spatial = enabled;
+    this.maxDistance = maxDistance;
+    this.rolloffFactor = rolloffFactor;
+  }
+  
+  setListener(listener) {
+    this.listener = listener;
+  }
+  
+  updateSpatialAudio() {
+    if (!this.spatial || !this.listener || !this.gameObject) return;
+    
+    const listenerPos = this.listener.transform ? this.listener.transform.position : this.listener;
+    const sourcePos = this.gameObject.transform.position;
+    
+    const distance = sourcePos.distance(listenerPos);
+    
+    if (distance > this.maxDistance) {
+      this.spatialVolume = 0;
+    } else if (distance <= this.referenceDistance) {
+      this.spatialVolume = 1.0;
+    } else {
+      // Logarithmic rolloff
+      this.spatialVolume = this.referenceDistance / (this.referenceDistance + this.rolloffFactor * (distance - this.referenceDistance));
+    }
+    
+    // Apply spatial volume
+    const finalVolume = this.volume * this.spatialVolume;
+    if (this.gainNode) {
+      this.gainNode.gain.value = finalVolume;
+    }
+    if (this.audio) {
+      this.audio.volume = finalVolume;
+    }
+    
+    // Calculate pan based on horizontal distance
+    if (this.stereoPanner) {
+      const dx = sourcePos.x - listenerPos.x;
+      const pan = Math.max(-1, Math.min(1, dx / this.maxDistance));
+      this.stereoPanner.pan.value = pan;
+    }
+  }
+  
+  // Update method for fade and spatial audio
+  update(deltaTime) {
+    // Handle fades
+    if (this.fadeType === 'in' && this.fadeInTime > 0) {
+      this.fadeTimer += deltaTime;
+      const progress = Math.min(this.fadeTimer / this.fadeInTime, 1.0);
+      this.setVolume(this.volume * progress);
+      
+      if (progress >= 1.0) {
+        this.fadeType = 'none';
+        this.fadeTimer = 0;
+      }
+    } else if (this.fadeType === 'out' && this.fadeOutTime > 0) {
+      this.fadeTimer += deltaTime;
+      const progress = Math.min(this.fadeTimer / this.fadeOutTime, 1.0);
+      this.setVolume(this.volume * (1.0 - progress));
+      
+      if (progress >= 1.0) {
+        this.fadeType = 'none';
+        this.fadeTimer = 0;
+        this.audio.pause();
+        this.audio.currentTime = 0;
+      }
+    }
+    
+    // Update spatial audio
+    if (this.spatial) {
+      this.updateSpatialAudio();
+    }
+  }
+  
+  // Utility methods
+  isPlaying() {
+    return this.audio && !this.audio.paused && this.audio.currentTime > 0;
+  }
+  
+  getCurrentTime() {
+    return this.audio ? this.audio.currentTime : 0;
+  }
+  
+  getDuration() {
+    return this.audio ? this.audio.duration : 0;
+  }
+  
+  seek(time) {
+    if (this.audio) {
+      this.audio.currentTime = Math.max(0, Math.min(time, this.audio.duration));
     }
   }
 }
@@ -1818,6 +2460,203 @@ class SceneManager {
       this.activeScene.update(deltaTime);
     }
   }
+  
+  // Scene serialization methods
+  serializeScene(sceneName) {
+    const scene = this.scenes.get(sceneName);
+    if (!scene) return null;
+    
+    try {
+      const sceneData = {
+        name: scene.name,
+        gameObjects: [],
+        camera: {
+          position: scene.camera.transform.position,
+          scale: scene.camera.transform.scale,
+          rotation: scene.camera.transform.rotation,
+          width: scene.camera.width,
+          height: scene.camera.height
+        },
+        backgroundColor: scene.backgroundColor,
+        timestamp: Date.now()
+      };
+      
+      // Serialize all game objects
+      for (const gameObject of scene.gameObjects) {
+        if (gameObject.serialize) {
+          sceneData.gameObjects.push(gameObject.serialize());
+        }
+      }
+      
+      return JSON.stringify(sceneData, null, 2);
+    } catch (error) {
+      Debug.error(`Failed to serialize scene ${sceneName}:`, error);
+      return null;
+    }
+  }
+  
+  deserializeScene(sceneData) {
+    try {
+      const data = typeof sceneData === 'string' ? JSON.parse(sceneData) : sceneData;
+      
+      // Create new scene
+      const scene = new Scene(data.name, data.backgroundColor);
+      
+      // Restore camera
+      if (data.camera) {
+        scene.camera.transform.position = new Vector2(data.camera.position.x, data.camera.position.y);
+        scene.camera.transform.scale = new Vector2(data.camera.scale.x, data.camera.scale.y);
+        scene.camera.transform.rotation = data.camera.rotation;
+        scene.camera.width = data.camera.width;
+        scene.camera.height = data.camera.height;
+      }
+      
+      // Restore game objects
+      for (const objData of data.gameObjects) {
+        try {
+          const gameObject = this.deserializeGameObject(objData, scene);
+          if (gameObject) {
+            scene.addGameObject(gameObject);
+          }
+        } catch (error) {
+          Debug.warn(`Failed to deserialize game object:`, error);
+        }
+      }
+      
+      return scene;
+    } catch (error) {
+      Debug.error(`Failed to deserialize scene:`, error);
+      return null;
+    }
+  }
+  
+  deserializeGameObject(objData, scene) {
+    try {
+      const gameObject = new GameObject(objData.name || 'DeserializedObject');
+      
+      // Restore transform
+      if (objData.transform) {
+        gameObject.transform.position = new Vector2(objData.transform.position.x, objData.transform.position.y);
+        gameObject.transform.scale = new Vector2(objData.transform.scale.x, objData.transform.scale.y);
+        gameObject.transform.rotation = objData.transform.rotation || 0;
+      }
+      
+      // Restore components
+      if (objData.components) {
+        for (const compData of objData.components) {
+          try {
+            const component = this.deserializeComponent(compData, gameObject);
+            if (component) {
+              gameObject.addComponent(component);
+            }
+          } catch (error) {
+            Debug.warn(`Failed to deserialize component ${compData.type}:`, error);
+          }
+        }
+      }
+      
+      return gameObject;
+    } catch (error) {
+      Debug.error(`Failed to deserialize game object:`, error);
+      return null;
+    }
+  }
+  
+  deserializeComponent(compData, gameObject) {
+    try {
+      let component;
+      
+      switch (compData.type) {
+        case 'SpriteRenderer':
+          component = new SpriteRenderer(compData.imageSrc, compData.width, compData.height, compData.layer);
+          if (compData.color) component.setColor(compData.color);
+          if (compData.alpha !== undefined) component.alpha = compData.alpha;
+          if (compData.flipX !== undefined) component.flipX = compData.flipX;
+          if (compData.flipY !== undefined) component.flipY = compData.flipY;
+          break;
+          
+        case 'Collider':
+          component = new Collider(compData.shape, compData.width, compData.height, compData.isTrigger, compData.layer);
+          break;
+          
+        case 'Rigidbody':
+          component = new Rigidbody(compData.mass, compData.gravityScale);
+          if (compData.velocity) {
+            component.velocity = new Vector2(compData.velocity.x, compData.velocity.y);
+          }
+          break;
+          
+        default:
+          Debug.warn(`Unknown component type: ${compData.type}`);
+          return null;
+      }
+      
+      // Restore custom properties
+      if (compData.properties) {
+        for (const [key, value] of Object.entries(compData.properties)) {
+          if (component[key] !== undefined) {
+            component[key] = value;
+          }
+        }
+      }
+      
+      return component;
+    } catch (error) {
+      Debug.error(`Failed to deserialize component ${compData.type}:`, error);
+      return null;
+    }
+  }
+  
+  // Save/load scene to/from localStorage
+  saveSceneToStorage(sceneName, storageKey = null) {
+    const serialized = this.serializeScene(sceneName);
+    if (!serialized) return false;
+    
+    const key = storageKey || `scene_${sceneName}`;
+    try {
+      localStorage.setItem(key, serialized);
+      Debug.log(`Scene ${sceneName} saved to localStorage`);
+      return true;
+    } catch (error) {
+      Debug.error(`Failed to save scene to localStorage:`, error);
+      return false;
+    }
+  }
+  
+  loadSceneFromStorage(storageKey) {
+    try {
+      const serialized = localStorage.getItem(storageKey);
+      if (!serialized) return null;
+      
+      const scene = this.deserializeScene(serialized);
+      if (scene) {
+        Debug.log(`Scene loaded from localStorage: ${storageKey}`);
+      }
+      return scene;
+    } catch (error) {
+      Debug.error(`Failed to load scene from localStorage:`, error);
+      return null;
+    }
+  }
+  
+  // Export scene to file
+  exportSceneToFile(sceneName, filename = null) {
+    const serialized = this.serializeScene(sceneName);
+    if (!serialized) return false;
+    
+    const blob = new Blob([serialized], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `${sceneName}_scene.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    Debug.log(`Scene ${sceneName} exported to file`);
+    return true;
+  }
 }
 
 // ==================== MANAGER CLASSES ====================
@@ -1830,7 +2669,28 @@ class InputManager {
     this.mouseButtons = new Map();
     this.previousMouseButtons = new Map();
     this.canvas = null;
+    
+    // Touch support
+    this.touches = new Map();
+    this.previousTouches = new Map();
+    this.touchStartPositions = new Map();
+    
+    // Gamepad support
+    this.gamepads = new Map();
+    this.gamepadAxes = new Map();
+    this.gamepadButtons = new Map();
+    this.gamepadConnected = false;
+    
+    // Virtual joystick for touch
+    this.virtualJoystick = {
+      active: false,
+      center: new Vector2(0, 0),
+      current: new Vector2(0, 0),
+      deadzone: 0.1
+    };
+    
     this.setupEventListeners();
+    this.setupGamepadSupport();
   }
 
   setCanvas(canvas) {
@@ -1868,6 +2728,108 @@ class InputManager {
     });
 
     window.addEventListener("contextmenu", (e) => e.preventDefault());
+    
+    // Touch events
+    if (this.canvas) {
+      this.canvas.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          const rect = this.canvas.getBoundingClientRect();
+          const pos = new Vector2(
+            touch.clientX - rect.left,
+            touch.clientY - rect.top
+          );
+          
+          this.touches.set(touch.identifier, pos);
+          this.touchStartPositions.set(touch.identifier, pos.copy());
+          
+          // Handle virtual joystick
+          if (touch.identifier === 0) {
+            this.virtualJoystick.active = true;
+            this.virtualJoystick.center = pos.copy();
+            this.virtualJoystick.current = pos.copy();
+          }
+        }
+      });
+      
+      this.canvas.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          const rect = this.canvas.getBoundingClientRect();
+          const pos = new Vector2(
+            touch.clientX - rect.left,
+            touch.clientY - rect.top
+          );
+          
+          this.touches.set(touch.identifier, pos);
+          
+          // Update virtual joystick
+          if (touch.identifier === 0) {
+            this.virtualJoystick.current = pos.copy();
+          }
+        }
+      });
+      
+      this.canvas.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          this.touches.delete(touch.identifier);
+          this.touchStartPositions.delete(touch.identifier);
+          
+          // Reset virtual joystick
+          if (touch.identifier === 0) {
+            this.virtualJoystick.active = false;
+          }
+        }
+      });
+    }
+  }
+  
+  setupGamepadSupport() {
+    window.addEventListener("gamepadconnected", (e) => {
+      const gamepad = e.gamepad;
+      this.gamepads.set(gamepad.index, gamepad);
+      this.gamepadConnected = true;
+      this.gamepadAxes.set(gamepad.index, new Array(gamepad.axes.length).fill(0));
+      this.gamepadButtons.set(gamepad.index, new Array(gamepad.buttons.length).fill(false));
+      console.log(`Gamepad connected: ${gamepad.id}`);
+    });
+    
+    window.addEventListener("gamepaddisconnected", (e) => {
+      this.gamepads.delete(e.gamepad.index);
+      this.gamepadAxes.delete(e.gamepad.index);
+      this.gamepadButtons.delete(e.gamepad.index);
+      this.gamepadConnected = this.gamepads.size > 0;
+      console.log(`Gamepad disconnected: ${e.gamepad.id}`);
+    });
+  }
+  
+  updateGamepadState() {
+    const gamepads = navigator.getGamepads();
+    
+    for (let i = 0; i < gamepads.length; i++) {
+      const gamepad = gamepads[i];
+      if (!gamepad) continue;
+      
+      // Update axes
+      if (this.gamepadAxes.has(i)) {
+        const axes = this.gamepadAxes.get(i);
+        for (let j = 0; j < gamepad.axes.length; j++) {
+          axes[j] = Math.abs(gamepad.axes[j]) > 0.1 ? gamepad.axes[j] : 0;
+        }
+      }
+      
+      // Update buttons
+      if (this.gamepadButtons.has(i)) {
+        const buttons = this.gamepadButtons.get(i);
+        for (let j = 0; j < gamepad.buttons.length; j++) {
+          buttons[j] = gamepad.buttons[j].pressed;
+        }
+      }
+    }
   }
 
   isKeyDown(keyCode) {
@@ -1921,8 +2883,67 @@ class InputManager {
       canvasHeight
     );
   }
-
+  
+  // Touch methods
+  getTouchCount() {
+    return this.touches.size;
+  }
+  
+  getTouchPosition(identifier = 0) {
+    return this.touches.get(identifier)?.copy() || new Vector2(0, 0);
+  }
+  
+  isTouchActive(identifier = 0) {
+    return this.touches.has(identifier);
+  }
+  
+  getTouchStartPosition(identifier = 0) {
+    return this.touchStartPositions.get(identifier)?.copy() || new Vector2(0, 0);
+  }
+  
+  // Virtual joystick methods
+  getVirtualJoystickVector() {
+    if (!this.virtualJoystick.active) return new Vector2(0, 0);
+    
+    const delta = this.virtualJoystick.current.subtract(this.virtualJoystick.center);
+    const magnitude = delta.magnitude();
+    
+    if (magnitude < this.virtualJoystick.deadzone * 50) {
+      return new Vector2(0, 0);
+    }
+    
+    return delta.normalize().multiplyByScalar(Math.min(magnitude / 50, 1.0));
+  }
+  
+  // Gamepad methods
+  isGamepadConnected() {
+    return this.gamepadConnected;
+  }
+  
+  getGamepadCount() {
+    return this.gamepads.size;
+  }
+  
+  getGamepadAxis(gamepadIndex = 0, axisIndex) {
+    const axes = this.gamepadAxes.get(gamepadIndex);
+    return axes ? axes[axisIndex] || 0 : 0;
+  }
+  
+  isGamepadButtonDown(gamepadIndex = 0, buttonIndex) {
+    const buttons = this.gamepadButtons.get(gamepadIndex);
+    return buttons ? buttons[buttonIndex] || false : false;
+  }
+  
+  isGamepadButtonPressed(gamepadIndex = 0, buttonIndex) {
+    // This would need to track previous state for proper pressed detection
+    return this.isGamepadButtonDown(gamepadIndex, buttonIndex);
+  }
+  
+  // Update method to be called each frame
   update() {
+    this.updateGamepadState();
+    
+    // Update previous states for proper pressed/released detection
     this.previousKeys.clear();
     this.keys.forEach((value, key) => this.previousKeys.set(key, value));
 
@@ -1930,6 +2951,478 @@ class InputManager {
     this.mouseButtons.forEach((value, key) =>
       this.previousMouseButtons.set(key, value)
     );
+    
+    this.previousTouches.clear();
+    this.touches.forEach((value, key) => this.previousTouches.set(key, value));
+  }
+}
+
+// ==================== UI SYSTEM ====================
+
+class UISystem {
+  constructor() {
+    this.elements = [];
+    this.focusedElement = null;
+    this.hoveredElement = null;
+    this.eventBus = new EventBus();
+  }
+  
+  addElement(element) {
+    this.elements.push(element);
+    return element;
+  }
+  
+  removeElement(element) {
+    const index = this.elements.indexOf(element);
+    if (index > -1) {
+      this.elements.splice(index, 1);
+    }
+  }
+  
+  update(deltaTime) {
+    for (const element of this.elements) {
+      if (element.update) {
+        element.update(deltaTime);
+      }
+    }
+  }
+  
+  draw(ctx) {
+    // Sort elements by layer (higher layer = drawn on top)
+    const sortedElements = [...this.elements].sort((a, b) => (a.layer || 0) - (b.layer || 0));
+    
+    for (const element of sortedElements) {
+      if (element.visible !== false) {
+        element.draw(ctx);
+      }
+    }
+  }
+  
+  handleInput(inputManager) {
+    const mousePos = inputManager.getMousePosition();
+    
+    // Find hovered element
+    let newHovered = null;
+    for (let i = this.elements.length - 1; i >= 0; i--) {
+      const element = this.elements[i];
+      if (element.visible !== false && element.containsPoint(mousePos)) {
+        newHovered = element;
+        break;
+      }
+    }
+    
+    // Handle hover events
+    if (newHovered !== this.hoveredElement) {
+      if (this.hoveredElement && this.hoveredElement.onMouseLeave) {
+        this.hoveredElement.onMouseLeave();
+      }
+      if (newHovered && newHovered.onMouseEnter) {
+        newHovered.onMouseEnter();
+      }
+      this.hoveredElement = newHovered;
+    }
+    
+    // Handle click events
+    if (inputManager.isMouseButtonPressed(0)) {
+      if (this.hoveredElement && this.hoveredElement.onClick) {
+        this.hoveredElement.onClick();
+        this.focusedElement = this.hoveredElement;
+      } else {
+        this.focusedElement = null;
+      }
+    }
+  }
+}
+
+class UIElement {
+  constructor(x = 0, y = 0, width = 100, height = 50) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+    this.visible = true;
+    this.layer = 0;
+    this.onClick = null;
+    this.onMouseEnter = null;
+    this.onMouseLeave = null;
+  }
+  
+  containsPoint(point) {
+    return point.x >= this.x && point.x <= this.x + this.width &&
+           point.y >= this.y && point.y <= this.y + this.height;
+  }
+  
+  draw(ctx) {
+    // Override in subclasses
+  }
+  
+  update(deltaTime) {
+    // Override in subclasses
+  }
+}
+
+class UIButton extends UIElement {
+  constructor(x = 0, y = 0, width = 100, height = 50, text = "Button") {
+    super(x, y, width, height);
+    this.text = text;
+    this.backgroundColor = "#4a90e2";
+    this.hoverColor = "#357abd";
+    this.textColor = "#ffffff";
+    this.fontSize = 16;
+    this.isHovered = false;
+    this.isPressed = false;
+  }
+  
+  draw(ctx) {
+    ctx.save();
+    
+    // Background
+    ctx.fillStyle = this.isHovered ? this.hoverColor : this.backgroundColor;
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+    
+    // Border
+    ctx.strokeStyle = "#2c5aa0";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(this.x, this.y, this.width, this.height);
+    
+    // Text
+    ctx.fillStyle = this.textColor;
+    ctx.font = `${this.fontSize}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
+    
+    ctx.restore();
+  }
+  
+  onMouseEnter() {
+    this.isHovered = true;
+  }
+  
+  onMouseLeave() {
+    this.isHovered = false;
+  }
+}
+
+class UIText extends UIElement {
+  constructor(x = 0, y = 0, text = "Text", fontSize = 16) {
+    super(x, y, 0, 0);
+    this.text = text;
+    this.fontSize = fontSize;
+    this.color = "#ffffff";
+    this.fontFamily = "Arial";
+    this.textAlign = "left";
+    this.textBaseline = "top";
+    this.maxWidth = null;
+    
+    // Calculate dimensions
+    this.updateDimensions();
+  }
+  
+  updateDimensions() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+    
+    if (this.maxWidth) {
+      // Handle text wrapping
+      const words = this.text.split(' ');
+      let line = '';
+      let lines = [];
+      
+      for (let word of words) {
+        const testLine = line + word + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > this.maxWidth && line !== '') {
+          lines.push(line);
+          line = word + ' ';
+        } else {
+          line = testLine;
+        }
+      }
+      lines.push(line);
+      
+      this.text = lines.join('\n');
+      this.height = lines.length * this.fontSize;
+      this.width = this.maxWidth;
+    } else {
+      const metrics = ctx.measureText(this.text);
+      this.width = metrics.width;
+      this.height = this.fontSize;
+    }
+  }
+  
+  draw(ctx) {
+    ctx.save();
+    
+    ctx.fillStyle = this.color;
+    ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+    ctx.textAlign = this.textAlign;
+    ctx.textBaseline = this.textBaseline;
+    
+    if (this.text.includes('\n')) {
+      // Multi-line text
+      const lines = this.text.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const y = this.y + i * this.fontSize;
+        ctx.fillText(lines[i], this.x, y);
+      }
+    } else {
+      ctx.fillText(this.text, this.x, this.y);
+    }
+    
+    ctx.restore();
+  }
+  
+  setText(text) {
+    this.text = text;
+    this.updateDimensions();
+  }
+}
+
+class UISlider extends UIElement {
+  constructor(x = 0, y = 0, width = 200, height = 20, minValue = 0, maxValue = 100, initialValue = 50) {
+    super(x, y, width, height);
+    this.minValue = minValue;
+    this.maxValue = maxValue;
+    this.value = initialValue;
+    this.isDragging = false;
+    this.onValueChange = null;
+    
+    this.backgroundColor = "#444444";
+    this.fillColor = "#4a90e2";
+    this.handleColor = "#ffffff";
+    this.handleSize = 20;
+  }
+  
+  draw(ctx) {
+    ctx.save();
+    
+    // Background track
+    ctx.fillStyle = this.backgroundColor;
+    ctx.fillRect(this.x, this.y + this.height / 2 - 2, this.width, 4);
+    
+    // Fill
+    const fillWidth = ((this.value - this.minValue) / (this.maxValue - this.minValue)) * this.width;
+    ctx.fillStyle = this.fillColor;
+    ctx.fillRect(this.x, this.y + this.height / 2 - 2, fillWidth, 4);
+    
+    // Handle
+    const handleX = this.x + fillWidth - this.handleSize / 2;
+    ctx.fillStyle = this.handleColor;
+    ctx.fillRect(handleX, this.y, this.handleSize, this.height);
+    
+    ctx.restore();
+  }
+  
+  handleInput(inputManager) {
+    if (inputManager.isMouseButtonDown(0)) {
+      const mousePos = inputManager.getMousePosition();
+      if (this.containsPoint(mousePos)) {
+        this.isDragging = true;
+      }
+    }
+    
+    if (this.isDragging) {
+      if (inputManager.isMouseButtonDown(0)) {
+        const mousePos = inputManager.getMousePosition();
+        const newValue = this.minValue + ((mousePos.x - this.x) / this.width) * (this.maxValue - this.minValue);
+        this.setValue(Math.max(this.minValue, Math.min(this.maxValue, newValue)));
+      } else {
+        this.isDragging = false;
+      }
+    }
+  }
+  
+  setValue(value) {
+    const oldValue = this.value;
+    this.value = Math.max(this.minValue, Math.min(this.maxValue, value));
+    
+    if (this.value !== oldValue && this.onValueChange) {
+      this.onValueChange(this.value);
+    }
+  }
+}
+
+// ==================== PARTICLE SYSTEM ====================
+
+class Particle {
+  constructor(x = 0, y = 0) {
+    this.position = new Vector2(x, y);
+    this.velocity = new Vector2(0, 0);
+    this.acceleration = new Vector2(0, 0);
+    this.life = 1.0;
+    this.maxLife = 1.0;
+    this.size = 4;
+    this.color = "#ffffff";
+    this.alpha = 1.0;
+    this.rotation = 0;
+    this.rotationSpeed = 0;
+    this.gravity = 0;
+    this.drag = 0.98;
+    this.active = true;
+  }
+  
+  update(deltaTime) {
+    if (!this.active) return;
+    
+    // Update life
+    this.life -= deltaTime;
+    if (this.life <= 0) {
+      this.active = false;
+      return;
+    }
+    
+    // Update physics
+    this.velocity.add(this.acceleration.multiplyByScalar(deltaTime));
+    this.velocity.multiplyByScalar(this.drag);
+    this.position.add(this.velocity.multiplyByScalar(deltaTime));
+    
+    // Apply gravity
+    if (this.gravity !== 0) {
+      this.velocity.y += this.gravity * deltaTime;
+    }
+    
+    // Update rotation
+    this.rotation += this.rotationSpeed * deltaTime;
+    
+    // Update alpha based on life
+    this.alpha = this.life / this.maxLife;
+  }
+  
+  draw(ctx) {
+    if (!this.active) return;
+    
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.translate(this.position.x, this.position.y);
+    ctx.rotate(this.rotation);
+    
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+    
+    ctx.restore();
+  }
+}
+
+class ParticleEmitter extends Component {
+  constructor() {
+    super();
+    this.particles = [];
+    this.maxParticles = 100;
+    this.emissionRate = 10; // particles per second
+    this.emissionTimer = 0;
+    this.emissionRadius = 0;
+    this.particleLife = { min: 1.0, max: 2.0 };
+    this.particleSize = { min: 2, max: 8 };
+    this.particleSpeed = { min: 50, max: 150 };
+    this.particleColor = "#ffffff";
+    this.gravity = 0;
+    this.drag = 0.98;
+    this.rotationSpeed = { min: -180, max: 180 };
+    this.emissionAngle = { min: 0, max: 360 };
+    this.active = true;
+    this.oneShot = false;
+    this.burstCount = 0;
+  }
+  
+  emitParticle() {
+    if (this.particles.length >= this.maxParticles) return;
+    
+    const particle = new Particle();
+    
+    // Set position
+    if (this.emissionRadius > 0) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * this.emissionRadius;
+      particle.position.x = Math.cos(angle) * radius;
+      particle.position.y = Math.sin(angle) * radius;
+    }
+    
+    // Set velocity
+    const speed = this.particleSpeed.min + Math.random() * (this.particleSpeed.max - this.particleSpeed.min);
+    const angle = (this.emissionAngle.min + Math.random() * (this.emissionAngle.max - this.emissionAngle.min)) * Math.PI / 180;
+    particle.velocity.x = Math.cos(angle) * speed;
+    particle.velocity.y = Math.sin(angle) * speed;
+    
+    // Set other properties
+    particle.life = this.particleLife.min + Math.random() * (this.particleLife.max - this.particleLife.min);
+    particle.maxLife = particle.life;
+    particle.size = this.particleSize.min + Math.random() * (this.particleSize.max - this.particleSize.min);
+    particle.color = this.particleColor;
+    particle.gravity = this.gravity;
+    particle.drag = this.drag;
+    particle.rotationSpeed = this.rotationSpeed.min + Math.random() * (this.rotationSpeed.max - this.rotationSpeed.min);
+    
+    this.particles.push(particle);
+  }
+  
+  emitBurst(count) {
+    for (let i = 0; i < count; i++) {
+      this.emitParticle();
+    }
+  }
+  
+  update(deltaTime) {
+    if (!this.active) return;
+    
+    // Emit particles
+    if (!this.oneShot) {
+      this.emissionTimer += deltaTime;
+      const emissionInterval = 1.0 / this.emissionRate;
+      
+      while (this.emissionTimer >= emissionInterval) {
+        this.emitParticle();
+        this.emissionTimer -= emissionInterval;
+      }
+    }
+    
+    // Update particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const particle = this.particles[i];
+      particle.update(deltaTime);
+      
+      if (!particle.active) {
+        this.particles.splice(i, 1);
+      }
+    }
+  }
+  
+  draw(ctx) {
+    for (const particle of this.particles) {
+      particle.draw(ctx);
+    }
+  }
+  
+  // Preset configurations
+  setExplosionConfig() {
+    this.emissionRate = 50;
+    this.particleLife = { min: 0.5, max: 1.5 };
+    this.particleSpeed = { min: 100, max: 300 };
+    this.emissionAngle = { min: 0, max: 360 };
+    this.gravity = 200;
+    this.oneShot = true;
+    this.burstCount = 100;
+  }
+  
+  setSmokeConfig() {
+    this.emissionRate = 5;
+    this.particleLife = { min: 2.0, max: 4.0 };
+    this.particleSize = { min: 8, max: 20 };
+    this.particleSpeed = { min: 20, max: 60 };
+    this.particleColor = "#666666";
+    this.gravity = -50;
+    this.drag = 0.95;
+  }
+  
+  setMagicConfig() {
+    this.emissionRate = 15;
+    this.particleLife = { min: 1.5, max: 3.0 };
+    this.particleSize = { min: 3, max: 8 };
+    this.particleSpeed = { min: 30, max: 80 };
+    this.particleColor = "#00ffff";
+    this.gravity = 0;
+    this.rotationSpeed = { min: -360, max: 360 };
   }
 }
 
@@ -1940,6 +3433,42 @@ class AssetManager {
     this.loadedAssets = 0;
     this.totalAssets = 0;
     this.loadingPromises = new Map();
+    this.eventBus = new EventBus();
+    this.placeholderAssets = new Map();
+    this.retryAttempts = new Map();
+    this.maxRetries = 3;
+    
+    // Create placeholder assets
+    this.createPlaceholderAssets();
+  }
+  
+  createPlaceholderAssets() {
+    // Create a simple colored rectangle as image placeholder
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw placeholder pattern
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(8, 8, 48, 48);
+    ctx.fillStyle = '#ff6b6b';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('404', 32, 32);
+    ctx.fillText('Image', 32, 48);
+    
+    const placeholderImage = new Image();
+    placeholderImage.src = canvas.toDataURL();
+    
+    this.placeholderAssets.set('image', placeholderImage);
+    
+    // Create placeholder audio (silent)
+    const placeholderAudio = new Audio();
+    placeholderAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+    this.placeholderAssets.set('audio', placeholderAudio);
   }
 
   async loadImage(path) {
@@ -1953,18 +3482,48 @@ class AssetManager {
 
     const promise = new Promise((resolve, reject) => {
       const image = new Image();
+      
       image.onload = () => {
         this.imageCache.set(path, image);
         this.loadedAssets++;
         this.loadingPromises.delete(path);
+        this.retryAttempts.delete(path);
+        
         Debug.log(`Loaded image: ${path}`);
+        this.eventBus.emit('asset_loaded', { type: 'image', path, asset: image });
         resolve(image);
       };
+      
       image.onerror = (error) => {
         this.loadingPromises.delete(path);
-        Debug.error(`Failed to load image: ${path}`, error);
-        reject(error);
+        
+        const retryCount = this.retryAttempts.get(path) || 0;
+        
+        if (retryCount < this.maxRetries) {
+          // Retry loading
+          this.retryAttempts.set(path, retryCount + 1);
+          Debug.warn(`Retrying to load image: ${path} (attempt ${retryCount + 1}/${this.maxRetries})`);
+          
+          setTimeout(() => {
+            image.src = path;
+          }, 1000 * (retryCount + 1)); // Exponential backoff
+          
+          return;
+        }
+        
+        // Max retries reached, use placeholder
+        Debug.error(`Failed to load image after ${this.maxRetries} attempts: ${path}`);
+        this.eventBus.emit('asset_failed', { type: 'image', path, error, attempts: retryCount });
+        
+        // Use placeholder asset
+        const placeholder = this.placeholderAssets.get('image');
+        this.imageCache.set(path, placeholder);
+        this.loadedAssets++;
+        
+        console.warn(`Asset '${path}' failed to load; using placeholder`);
+        resolve(placeholder);
       };
+      
       image.src = path;
     });
 
@@ -1984,18 +3543,48 @@ class AssetManager {
 
     const promise = new Promise((resolve, reject) => {
       const audio = new Audio();
+      
       audio.oncanplaythrough = () => {
         this.audioCache.set(path, audio);
         this.loadedAssets++;
         this.loadingPromises.delete(path);
+        this.retryAttempts.delete(path);
+        
         Debug.log(`Loaded audio: ${path}`);
+        this.eventBus.emit('asset_loaded', { type: 'audio', path, asset: audio });
         resolve(audio);
       };
+      
       audio.onerror = (error) => {
         this.loadingPromises.delete(path);
-        Debug.error(`Failed to load audio: ${path}`, error);
-        reject(error);
+        
+        const retryCount = this.retryAttempts.get(path) || 0;
+        
+        if (retryCount < this.maxRetries) {
+          // Retry loading
+          this.retryAttempts.set(path, retryCount + 1);
+          Debug.warn(`Retrying to load audio: ${path} (attempt ${retryCount + 1}/${this.maxRetries})`);
+          
+          setTimeout(() => {
+            audio.src = path;
+          }, 1000 * (retryCount + 1)); // Exponential backoff
+          
+          return;
+        }
+        
+        // Max retries reached, use placeholder
+        Debug.error(`Failed to load audio after ${this.maxRetries} attempts: ${path}`);
+        this.eventBus.emit('asset_failed', { type: 'audio', path, error, attempts: retryCount });
+        
+        // Use placeholder asset
+        const placeholder = this.placeholderAssets.get('audio');
+        this.audioCache.set(path, placeholder);
+        this.loadedAssets++;
+        
+        console.warn(`Asset '${path}' failed to load; using placeholder`);
+        resolve(placeholder);
       };
+      
       audio.src = path;
     });
 
@@ -2038,6 +3627,176 @@ class AssetManager {
     this.loadingPromises.clear();
     this.loadedAssets = 0;
     this.totalAssets = 0;
+    this.retryAttempts.clear();
+  }
+  
+  // Asset management methods
+  unloadAsset(path, type = 'auto') {
+    if (type === 'auto' || type === 'image') {
+      this.imageCache.delete(path);
+    }
+    if (type === 'auto' || type === 'audio') {
+      this.audioCache.delete(path);
+    }
+    this.retryAttempts.delete(path);
+    
+    Debug.log(`Unloaded asset: ${path}`);
+    this.eventBus.emit('asset_unloaded', { type, path });
+  }
+  
+  unloadUnusedAssets() {
+    // This would need to track asset usage to implement properly
+    // For now, just clear all assets
+    this.clear();
+    Debug.log('Unloaded all unused assets');
+  }
+  
+  getAssetInfo(path) {
+    const info = {
+      path,
+      image: this.imageCache.has(path),
+      audio: this.audioCache.has(path),
+      loading: this.loadingPromises.has(path),
+      retryAttempts: this.retryAttempts.get(path) || 0
+    };
+    return info;
+  }
+  
+  getMemoryUsage() {
+    // Rough estimation of memory usage
+    let imageMemory = 0;
+    for (const [path, image] of this.imageCache) {
+      imageMemory += (image.width * image.height * 4); // 4 bytes per pixel (RGBA)
+    }
+    
+    return {
+      images: this.imageCache.size,
+      audio: this.audioCache.size,
+      loading: this.loadingPromises.size,
+      estimatedMemoryBytes: imageMemory,
+      estimatedMemoryMB: (imageMemory / (1024 * 1024)).toFixed(2)
+    };
+  }
+  
+  // Event handling
+  onAssetLoaded(callback) {
+    return this.eventBus.on('asset_loaded', callback);
+  }
+  
+  onAssetFailed(callback) {
+    return this.eventBus.on('asset_failed', callback);
+  }
+  
+  onAssetUnloaded(callback) {
+    return this.eventBus.on('asset_unloaded', callback);
+  }
+}
+
+// ==================== SPATIAL PARTITIONING ====================
+
+class Quadtree {
+  constructor(bounds, maxObjects = 10, maxDepth = 8, depth = 0) {
+    this.bounds = bounds;
+    this.maxObjects = maxObjects;
+    this.maxDepth = maxDepth;
+    this.depth = depth;
+    this.objects = [];
+    this.nodes = [];
+    this.divided = false;
+  }
+  
+  insert(item) {
+    if (!this.bounds) return false;
+    
+    if (!this.intersects(this.bounds, item.bounds)) {
+      return false;
+    }
+    
+    if (this.objects.length < this.maxObjects && !this.divided) {
+      this.objects.push(item);
+      return true;
+    }
+    
+    if (!this.divided) {
+      this.subdivide();
+    }
+    
+    // Try to insert into child nodes
+    for (const node of this.nodes) {
+      if (node.insert(item)) {
+        return true;
+      }
+    }
+    
+    // If we can't insert into children, add to this node
+    this.objects.push(item);
+    return true;
+  }
+  
+  subdivide() {
+    const x = this.bounds.x;
+    const y = this.bounds.y;
+    const w = this.bounds.width / 2;
+    const h = this.bounds.height / 2;
+    
+    this.nodes = [
+      new Quadtree({ x: x, y: y, width: w, height: h }, this.maxObjects, this.maxDepth, this.depth + 1),
+      new Quadtree({ x: x + w, y: y, width: w, height: h }, this.maxObjects, this.maxDepth, this.depth + 1),
+      new Quadtree({ x: x, y: y + h, width: w, height: h }, this.maxObjects, this.maxDepth, this.depth + 1),
+      new Quadtree({ x: x + w, y: y + h, width: w, height: h }, this.maxObjects, this.maxDepth, this.depth + 1)
+    ];
+    
+    this.divided = true;
+  }
+  
+  retrieve(searchArea) {
+    const returnObjects = [];
+    
+    if (!this.intersects(this.bounds, searchArea)) {
+      return returnObjects;
+    }
+    
+    for (const item of this.objects) {
+      if (this.intersects(searchArea, item.bounds)) {
+        returnObjects.push(item);
+      }
+    }
+    
+    if (this.divided) {
+      for (const node of this.nodes) {
+        returnObjects.push(...node.retrieve(searchArea));
+      }
+    }
+    
+    return returnObjects;
+  }
+  
+  intersects(boundsA, boundsB) {
+    return !(boundsA.x > boundsB.x + boundsB.width ||
+             boundsA.x + boundsA.width < boundsB.x ||
+             boundsA.y > boundsB.y + boundsB.height ||
+             boundsA.y + boundsA.height < boundsB.y);
+  }
+  
+  clear() {
+    this.objects = [];
+    this.nodes = [];
+    this.divided = false;
+  }
+  
+  getStats() {
+    let totalObjects = this.objects.length;
+    let totalNodes = 1;
+    
+    if (this.divided) {
+      for (const node of this.nodes) {
+        const stats = node.getStats();
+        totalObjects += stats.objects;
+        totalNodes += stats.nodes;
+      }
+    }
+    
+    return { objects: totalObjects, nodes: totalNodes };
   }
 }
 
@@ -2046,6 +3805,10 @@ class PhysicsEngine {
   constructor() {
     this.gravity = new Vector2(0, 980);
     this.collisionPairs = new Map();
+    this.quadtree = null;
+    this.quadtreeBounds = { x: 0, y: 0, width: 2000, height: 2000 };
+    this.maxObjectsPerNode = 10;
+    this.maxDepth = 8;
   }
 
   setCollisionRule(layerA, layerB, canCollide) {
@@ -2056,23 +3819,32 @@ class PhysicsEngine {
     if (!scene) return;
 
     const collidableObjects = scene.findGameObjectsWithComponent(Collider);
+    
+    // Update quadtree
+    this.updateQuadtree(collidableObjects);
+    
     const currentCollisions = new Set();
 
+    // Use quadtree for optimized collision detection
     for (let i = 0; i < collidableObjects.length; i++) {
-      for (let j = i + 1; j < collidableObjects.length; j++) {
-        const objA = collidableObjects[i];
-        const objB = collidableObjects[j];
+      const objA = collidableObjects[i];
+      if (!objA.active) continue;
 
-        if (!objA.active || !objB.active) continue;
+      const colliderA = objA.getComponent(Collider);
+      if (!colliderA.enabled) continue;
 
-        const colliderA = objA.getComponent(Collider);
+      // Get potential collision candidates from quadtree
+      const candidates = this.getCollisionCandidates(objA);
+      
+      for (const objB of candidates) {
+        if (objA === objB || !objB.active) continue;
+
         const colliderB = objB.getComponent(Collider);
+        if (!colliderB.enabled) continue;
 
-        if (!colliderA.enabled || !colliderB.enabled) continue;
-
-        // QUALITY OF LIFE IMPROVEMENT #6: Check collision matrix
+        // Check collision matrix
         if (!PhysicsLayers.canCollide(colliderA.layer, colliderB.layer)) {
-          continue; // Skip collision check if layers shouldn't interact
+          continue;
         }
 
         const pairKey = this.getPairKey(objA.id, objB.id);
@@ -2089,7 +3861,6 @@ class PhysicsEngine {
           colliderA.onCollision(objB);
           colliderB.onCollision(objA);
 
-          // ADD THIS LINE - Resolve solid collisions
           this.resolveCollision(objA, objB);
         } else if (this.collisionPairs.has(pairKey)) {
           const pair = this.collisionPairs.get(pairKey);
@@ -2109,6 +3880,51 @@ class PhysicsEngine {
 
   getPairKey(idA, idB) {
     return idA < idB ? `${idA}-${idB}` : `${idB}-${idA}`;
+  }
+  
+  // Quadtree methods
+  updateQuadtree(objects) {
+    this.quadtree = new Quadtree(this.quadtreeBounds, this.maxObjectsPerNode, this.maxDepth);
+    
+    for (const obj of objects) {
+      if (obj.active) {
+        const collider = obj.getComponent(Collider);
+        if (collider && collider.enabled) {
+          const bounds = collider.getBounds();
+          this.quadtree.insert({
+            object: obj,
+            bounds: bounds
+          });
+        }
+      }
+    }
+  }
+  
+  getCollisionCandidates(obj) {
+    if (!this.quadtree) return [];
+    
+    const collider = obj.getComponent(Collider);
+    if (!collider) return [];
+    
+    const bounds = collider.getBounds();
+    const searchArea = {
+      x: bounds.left,
+      y: bounds.top,
+      width: bounds.right - bounds.left,
+      height: bounds.bottom - bounds.top
+    };
+    
+    const candidates = this.quadtree.retrieve(searchArea);
+    return candidates.map(item => item.object);
+  }
+  
+  setQuadtreeBounds(x, y, width, height) {
+    this.quadtreeBounds = { x, y, width, height };
+  }
+  
+  setQuadtreeSettings(maxObjects, maxDepth) {
+    this.maxObjectsPerNode = maxObjects;
+    this.maxDepth = maxDepth;
   }
 
   // Add this method to PhysicsEngine class
@@ -2560,6 +4376,17 @@ if (typeof module !== "undefined" && module.exports) {
     EventBus,
     PhysicsLayers,
     Debug,
+    // New enhanced features
+    Quadtree,
+    UISystem,
+    UIElement,
+    UIButton,
+    UIText,
+    UISlider,
+    Particle,
+    ParticleEmitter,
+    Timer,
+    TimerManager,
   };
 }
 
@@ -2586,6 +4413,17 @@ if (typeof window !== "undefined") {
     EventBus,
     PhysicsLayers,
     Debug,
+    // New enhanced features
+    Quadtree,
+    UISystem,
+    UIElement,
+    UIButton,
+    UIText,
+    UISlider,
+    Particle,
+    ParticleEmitter,
+    Timer,
+    TimerManager,
   };
 }
 
@@ -2664,8 +4502,8 @@ engine.physicsEngine.setCollisionRule('PlayerBullet', 'Enemy', true);
 */
 
 console.log(
-  "Enhanced 2D Game Engine with Quality of Life Features loaded and ready!"
+  "Enhanced 2D Game Engine with Advanced Features loaded and ready!"
 );
 console.log(
-  "Features: Inheritance-aware getComponent, Fluent API, Timer system, State machines, Tilemaps, Physics layers"
+  "Features: Animation System, Spatial Partitioning, Touch/Gamepad Input, UI System, Particle System, Enhanced Audio, Scene Serialization, Debug Overlay"
 );
