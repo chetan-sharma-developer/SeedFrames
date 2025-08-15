@@ -42,6 +42,37 @@ class Vector2 {
   dot(other) {
     return this.x * other.x + this.y * other.y;
   }
+  
+  // Performance-optimized mutable methods for game loop
+  addInPlace(other) {
+    this.x += other.x;
+    this.y += other.y;
+    return this; // For chaining
+  }
+  
+  subtractInPlace(other) {
+    this.x -= other.x;
+    this.y -= other.y;
+    return this;
+  }
+  
+  multiplyByScalarInPlace(scalar) {
+    this.x *= scalar;
+    this.y *= scalar;
+    return this;
+  }
+  
+  normalizeInPlace() {
+    const mag = this.magnitude();
+    if (mag === 0) {
+      this.x = 0;
+      this.y = 0;
+    } else {
+      this.x /= mag;
+      this.y /= mag;
+    }
+    return this;
+  }
 
   static zero() {
     return new Vector2(0, 0);
@@ -223,6 +254,12 @@ class Debug {
     this.memoryUsage = 0;
   }
   
+  static updateMemoryUsage() {
+    if (performance && performance.memory) {
+      this.memoryUsage = performance.memory.usedJSHeapSize / 1024 / 1024; // MB
+    }
+  }
+  
   // Profiling methods
   static startProfile(name) {
     if (!this.enabled) return;
@@ -363,16 +400,7 @@ class Debug {
     this.showQuadtree = !this.showQuadtree;
   }
   
-  // Reset stats
-  static resetStats() {
-    this.frameTimes = [];
-    this.updateTimes = [];
-    this.renderTimes = [];
-    this.collisionChecks = 0;
-    this.activeObjects = 0;
-    this.memoryUsage = 0;
-    this.profilerData.clear();
-  }
+
 }
 
 function generateUniqueId() {
@@ -1538,7 +1566,6 @@ class Player extends Component {
     this.isInvulnerable = false;
     this.invulnerabilityTime = 0;
 
-    this.velocity = new Vector2(0, 0);
     this.lastGroundedTime = 0;
     this.lastJumpInputTime = 0;
 
@@ -1563,23 +1590,32 @@ class Player extends Component {
     this.onStateChange = config.onStateChange || null;
 
     this.inputManager = null;
+    this.rigidbody = null; // Cache the rigidbody reference
   }
 
   start() {
     if (this.gameObject.scene && this.gameObject.scene.engine) {
       this.inputManager = this.gameObject.scene.engine.inputManager;
     }
+    
+    // Cache the rigidbody for performance and validation
+    this.rigidbody = this.gameObject.getComponent(Rigidbody);
+    if (!this.rigidbody) {
+      Debug.error("Player component requires a Rigidbody component on the same GameObject.");
+      return;
+    }
+    
     this.updateSpriteDirection();
   }
 
   update(deltaTime) {
-    if (!this.isAlive || !this.inputManager) return;
+    if (!this.isAlive || !this.inputManager || !this.rigidbody) return;
     
 
     this.updateTimers(deltaTime);
     this.handleInput(deltaTime);
-    this.applyPhysics(deltaTime);
-    this.updatePosition(deltaTime);
+    // REMOVED: this.applyPhysics(deltaTime) and this.updatePosition(deltaTime)
+    // Rigidbody now handles all physics and position updates
     this.handleBoundaries();
     this.updateState();
     this.updateSpriteDirection();
@@ -1628,17 +1664,46 @@ class Player extends Component {
 
     if (movement.magnitude() > 0) {
       const normalized = movement.normalize();
-      this.velocity = normalized.multiplyByScalar(this.speed);
+      const targetVelocity = normalized.multiplyByScalar(this.speed);
+      this.rigidbody.setVelocity(targetVelocity); // Control the rigidbody
       this.updateFacing(normalized);
     } else {
-      this.velocity = this.velocity.multiplyByScalar(this.friction);
+      // Let rigidbody's drag handle slowdown
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(currentVelocity.multiplyByScalar(this.friction));
     }
   }
 
   handlePlatformerInput(deltaTime) {
-    // This method is now handled by the AdvancedPlatformerPlayer class
-    // The base Player class should not handle platformer input when using Rigidbody
-    return;
+    let horizontalInput = 0;
+    if (this.inputManager.isKeyDown(this.inputConfig.left))
+      horizontalInput -= 1;
+    if (this.inputManager.isKeyDown(this.inputConfig.right))
+      horizontalInput += 1;
+
+    if (horizontalInput !== 0) {
+      const targetVelocityX = horizontalInput * this.speed;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(targetVelocityX, currentVelocity.y));
+      this.updateFacing(new Vector2(horizontalInput, 0));
+    } else {
+      // Apply ground drag when no input
+      const drag = this.isGrounded ? this.groundDrag : this.airDrag;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(currentVelocity.x * drag, currentVelocity.y));
+    }
+
+    if (this.inputManager.isKeyDown(this.inputConfig.jump)) {
+      this.lastJumpInputTime = 0;
+    }
+
+    if (
+      this.lastJumpInputTime < this.jumpBufferTime &&
+      (this.isGrounded || this.lastGroundedTime < this.coyoteTime)
+    ) {
+      this.jump();
+      this.lastJumpInputTime = this.jumpBufferTime;
+    }
   }
 
   handleRacingInput(deltaTime) {
@@ -1654,14 +1719,15 @@ class Player extends Component {
 
     if (this.inputManager.isKeyDown(this.inputConfig.brake)) braking = true;
 
-    const currentSpeed = this.velocity.magnitude();
+    const currentVelocity = this.rigidbody.velocity;
+    const currentSpeed = currentVelocity.magnitude();
 
     if (throttle !== 0) {
       const forceDirection = this.getForwardVector();
       const force = forceDirection.multiplyByScalar(
         throttle * this.acceleration
       );
-      this.velocity = this.velocity.add(force.multiplyByScalar(deltaTime));
+      this.rigidbody.addForce(force);
     }
 
     if (steering !== 0 && currentSpeed > 10) {
@@ -1674,16 +1740,16 @@ class Player extends Component {
     }
 
     if (braking) {
-      const brakeForce = this.velocity
+      const brakeForce = currentVelocity
         .normalize()
         .multiplyByScalar(-this.brakingForce * deltaTime);
-      this.velocity = this.velocity.add(brakeForce);
+      this.rigidbody.addForce(brakeForce);
     }
 
-    this.velocity = this.velocity.multiplyByScalar(this.friction);
-
-    if (this.velocity.magnitude() > this.maxSpeed) {
-      this.velocity = this.velocity.normalize().multiplyByScalar(this.maxSpeed);
+    // Speed limiting is handled by the Rigidbody component
+    if (currentSpeed > this.maxSpeed) {
+      const limitedVelocity = currentVelocity.normalize().multiplyByScalar(this.maxSpeed);
+      this.rigidbody.setVelocity(limitedVelocity);
     }
   }
 
@@ -1695,18 +1761,23 @@ class Player extends Component {
       horizontalInput += 1;
 
     if (horizontalInput !== 0) {
-      this.velocity.x = horizontalInput * this.speed;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(horizontalInput * this.speed, currentVelocity.y));
       this.updateFacing(new Vector2(horizontalInput, 0));
     } else {
-      this.velocity.x *= this.friction;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(currentVelocity.x * this.friction, currentVelocity.y));
     }
 
     if (this.inputManager.isKeyDown(this.inputConfig.up)) {
-      this.velocity.y = -this.speed * 0.5;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(currentVelocity.x, -this.speed * 0.5));
     } else if (this.inputManager.isKeyDown(this.inputConfig.down)) {
-      this.velocity.y = this.speed * 0.5;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(currentVelocity.x, this.speed * 0.5));
     } else {
-      this.velocity.y *= this.friction;
+      const currentVelocity = this.rigidbody.velocity;
+      this.rigidbody.setVelocity(new Vector2(currentVelocity.x, currentVelocity.y * this.friction));
     }
   }
 
@@ -1721,52 +1792,24 @@ class Player extends Component {
     if (movement.magnitude() > 0) {
       const normalized = movement.normalize();
       const force = normalized.multiplyByScalar(this.liftForce * deltaTime);
-      this.velocity = this.velocity.add(force);
+      this.rigidbody.addForce(force);
       this.updateFacing(normalized);
     }
 
-    this.velocity = this.velocity.multiplyByScalar(this.airDrag);
+    // Apply air drag through the rigidbody
+    const currentVelocity = this.rigidbody.velocity;
+    this.rigidbody.setVelocity(currentVelocity.multiplyByScalar(this.airDrag));
 
-    if (this.velocity.magnitude() > this.maxSpeed) {
-      this.velocity = this.velocity.normalize().multiplyByScalar(this.maxSpeed);
+    // Speed limiting
+    if (currentVelocity.magnitude() > this.maxSpeed) {
+      const limitedVelocity = currentVelocity.normalize().multiplyByScalar(this.maxSpeed);
+      this.rigidbody.setVelocity(limitedVelocity);
     }
   }
 
-  applyPhysics(deltaTime) {
-    // Check if this GameObject has a Rigidbody component
-    const rigidbody = this.gameObject.getComponent(Rigidbody);
-    if (rigidbody) {
-      // If using Rigidbody, don't apply physics here
-      return;
-    }
-    
-    // Only apply physics if no Rigidbody is present
-    switch (this.movementType) {
-      case "platformer":
-        if (!this.isGrounded) {
-          this.velocity.y += this.gravity * deltaTime;
-        }
-        break;
+  // REMOVED: applyPhysics method - Rigidbody now handles all physics
 
-      case "flying":
-        this.velocity.y += this.gravity * 0.1 * deltaTime;
-        break;
-    }
-  }
-
-  updatePosition(deltaTime) {
-    // Check if this GameObject has a Rigidbody component
-    const rigidbody = this.gameObject.getComponent(Rigidbody);
-    if (rigidbody) {
-      // If using Rigidbody, don't update position here
-      return;
-    }
-    
-    // Only update position if no Rigidbody is present
-    const movement = this.velocity.multiplyByScalar(deltaTime);
-    this.gameObject.transform.position =
-      this.gameObject.transform.position.add(movement);
-  }
+  // REMOVED: updatePosition method - Rigidbody now handles all position updates
 
   handleBoundaries() {
     if (!this.boundaries) return;
@@ -1802,21 +1845,22 @@ class Player extends Component {
 
   updateState() {
     const oldState = this.state;
+    const currentVelocity = this.rigidbody ? this.rigidbody.velocity : new Vector2(0, 0);
 
     if (!this.isAlive) {
       this.state = "dead";
     } else if (this.movementType === "platformer") {
-      if (!this.isGrounded && this.velocity.y > 0) {
+      if (!this.isGrounded && currentVelocity.y > 0) {
         this.state = "falling";
-      } else if (!this.isGrounded && this.velocity.y < 0) {
+      } else if (!this.isGrounded && currentVelocity.y < 0) {
         this.state = "jumping";
-      } else if (Math.abs(this.velocity.x) > 10) {
+      } else if (Math.abs(currentVelocity.x) > 10) {
         this.state = "moving";
       } else {
         this.state = "idle";
       }
     } else {
-      if (this.velocity.magnitude() > 10) {
+      if (currentVelocity.magnitude() > 10) {
         this.state = "moving";
       } else {
         this.state = "idle";
@@ -1852,16 +1896,19 @@ class Player extends Component {
     return new Vector2(Math.cos(rotation), Math.sin(rotation));
   }
 
-  // In Player class, replace the jump method:
   jump() {
-    if (this.movementType !== "platformer") return;
+    if (this.movementType !== "platformer" || !this.rigidbody) return;
 
-    console.log("Jumping with force:", this.jumpForce);
-    this.velocity.y = -this.jumpForce;
-    this.isGrounded = false;
-    this.lastGroundedTime = this.coyoteTime + 0.1; // Ensure coyote time is exceeded
-
-    if (this.onJump) this.onJump();
+    // Use coyote time and jump buffering checks here
+    if (this.lastGroundedTime < this.coyoteTime || this.lastJumpInputTime < this.jumpBufferTime) {
+      const currentVelocity = this.rigidbody.velocity;
+      const jumpVelocity = new Vector2(currentVelocity.x, -this.jumpForce);
+      this.rigidbody.setVelocity(jumpVelocity); // Set vertical velocity on the rigidbody
+      
+      this.isGrounded = false;
+      this.lastGroundedTime = this.coyoteTime + 0.1; // Prevent multi-jump
+      if (this.onJump) this.onJump();
+    }
   }
 
   takeDamage(amount) {
@@ -1917,7 +1964,9 @@ class Player extends Component {
   respawn(position = null) {
     this.isAlive = true;
     this.health = this.maxHealth;
-    this.velocity = Vector2.zero();
+    if (this.rigidbody) {
+      this.rigidbody.setVelocity(Vector2.zero());
+    }
     this.state = "idle";
     this.makeInvulnerable(2.0);
 
@@ -1940,6 +1989,39 @@ class Player extends Component {
     } else if (!grounded && wasGrounded) {
       // Player just left the ground
       this.lastGroundedTime = 0;
+    }
+  }
+  
+  // Handle collision events from the physics engine
+  onCollisionEnter(other) {
+    const otherCollider = other.getComponent(Collider);
+    if (!otherCollider) return;
+    
+    // Handle platform collisions for grounded state
+    if (otherCollider.layer === 'Platform') {
+      const playerCollider = this.gameObject.getComponent(Collider);
+      if (!playerCollider) return;
+      
+      const playerBounds = playerCollider.getBounds();
+      const platformBounds = otherCollider.getBounds();
+      
+      // Check if player is above the platform
+      if (playerBounds.centerY < platformBounds.centerY) {
+        this.setGrounded(true);
+        
+        // Stop downward velocity
+        if (this.rigidbody && this.rigidbody.velocity.y > 0) {
+          this.rigidbody.setVelocity(new Vector2(this.rigidbody.velocity.x, 0));
+        }
+      }
+    }
+  }
+  
+  onCollisionExit(other) {
+    const otherCollider = other.getComponent(Collider);
+    if (otherCollider && otherCollider.layer === 'Platform') {
+      // Mark as not grounded when leaving platform
+      this.setGrounded(false);
     }
   }
 
@@ -4368,7 +4450,7 @@ class PhysicsEngine {
     this.maxDepth = maxDepth;
   }
 
-  // Enhanced collision resolution for Player vs Platform interactions
+  // Generic collision resolution - no game-specific logic
   resolveCollision(objA, objB) {
     const colliderA = objA.getComponent(Collider);
     const colliderB = objB.getComponent(Collider);
@@ -4376,79 +4458,8 @@ class PhysicsEngine {
     // Skip if either is a trigger
     if (colliderA.isTrigger || colliderB.isTrigger) return;
 
-    // Handle Player vs Platform collisions specifically
-    let player, platform, playerCollider, platformCollider;
-    if (colliderA.layer === "Player" && colliderB.layer === "Platform") {
-      player = objA;
-      platform = objB;
-      playerCollider = colliderA;
-      platformCollider = colliderB;
-    } else if (colliderB.layer === "Player" && colliderA.layer === "Platform") {
-      player = objB;
-      platform = objA;
-      playerCollider = colliderB;
-      platformCollider = colliderA;
-    } else {
-      // For other collisions, use simple resolution
-      this.resolveSimpleCollision(objA, objB);
-      return;
-    }
-
-    const playerBounds = playerCollider.getBounds();
-    const platformBounds = platformCollider.getBounds();
-
-    // Calculate overlap
-    const overlapX = Math.min(
-      playerBounds.right - platformBounds.left,
-      platformBounds.right - playerBounds.left
-    );
-    const overlapY = Math.min(
-      playerBounds.bottom - platformBounds.top,
-      platformBounds.bottom - playerBounds.top
-    );
-
-    // Only resolve if there's significant overlap
-    if (overlapX > 1 && overlapY > 1) {
-      if (overlapX < overlapY) {
-        // Horizontal collision - push player away
-        const moveX = overlapX * (playerBounds.centerX < platformBounds.centerX ? -1 : 1);
-        player.transform.position.x += moveX;
-        
-        // Stop horizontal velocity
-        const rigidbody = player.getComponent(Rigidbody);
-        if (rigidbody) {
-          rigidbody.velocity.x = 0;
-        }
-      } else {
-        // Vertical collision
-        if (playerBounds.centerY < platformBounds.centerY) {
-          // Player is above platform - land on it
-          player.transform.position.y = platformBounds.top - playerBounds.height / 2;
-          
-          // Stop downward velocity and set grounded
-          const rigidbody = player.getComponent(Rigidbody);
-          if (rigidbody && rigidbody.velocity.y > 0) {
-            rigidbody.velocity.y = 0;
-          }
-          
-          // Set player as grounded
-          const playerComponent = player.getComponent(Player);
-          if (playerComponent) {
-            playerComponent.setGrounded(true);
-          }
-        } else {
-          // Player is below platform - push down
-          const moveY = overlapY;
-          player.transform.position.y += moveY;
-          
-          // Stop upward velocity
-          const rigidbody = player.getComponent(Rigidbody);
-          if (rigidbody && rigidbody.velocity.y < 0) {
-            rigidbody.velocity.y = 0;
-          }
-        }
-      }
-    }
+    // Use simple separation-based resolution for all collisions
+    this.resolveSimpleCollision(objA, objB);
   }
 
   // Simple collision resolution for non-player collisions
