@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Physics Test - SeedFrames Engine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #2c3e50;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        #game-container {
+            border: 2px solid #34495e;
+            border-radius: 5px;
+            background: #000;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        #instructions {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+        
+        #debug-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        <h2>Platformer Physics Test</h2>
+        <p>Arrow Keys: Move | Spacebar: Jump | Test the improved physics!</p>
+    </div>
+    
+    <div id="game-container">
+        <div id="debug-info">
+            <div>Player Position: <span id="player-pos">0, 0</span></div>
+            <div>Player Velocity: <span id="player-vel">0, 0</span></div>
+            <div>Grounded: <span id="player-grounded">false</span></div>
+            <div>FPS: <span id="fps">0</span></div>
+        </div>
+    </div>
+
+    <script src="./seedframes.js"></script>
+    <script>
+        // Simple test to verify platformer physics fixes
+        const engine = new GameEngine.SeedFrames({
+            width: 800,
+            height: 600,
+            containerId: 'game-container',
+            backgroundColor: '#87CEEB',
+            debug: false
+        });
+
+        const gameScene = engine.createScene('TestScene');
+        let player;
+
+        // Simple platformer player for testing
+        class TestPlatformerPlayer extends GameEngine.PlatformerPlayer {
+            constructor(config = {}) {
+                super({
+                    speed: 200,
+                    jumpForce: 400,
+                    gravity: 1000,
+                    ...config
+                });
+            }
+
+            update(deltaTime) {
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
+
+                // Handle input
+                let horizontalInput = 0;
+                if (engine.inputManager.isKeyDown('ArrowLeft') || engine.inputManager.isKeyDown('KeyA')) {
+                    horizontalInput -= 1;
+                }
+                if (engine.inputManager.isKeyDown('ArrowRight') || engine.inputManager.isKeyDown('KeyD')) {
+                    horizontalInput += 1;
+                }
+
+                // Apply movement
+                if (horizontalInput !== 0) {
+                    rigidbody.velocity.x = horizontalInput * this.speed;
+                } else {
+                    rigidbody.velocity.x *= 0.8; // Ground drag
+                }
+
+                // Jump
+                if (engine.inputManager.isKeyDown('Space') || engine.inputManager.isKeyDown('ArrowUp')) {
+                    this.lastJumpInputTime = 0;
+                }
+
+                if (this.lastJumpInputTime < this.jumpBufferTime && 
+                    (this.isGrounded || this.lastGroundedTime < this.coyoteTime)) {
+                    this.jump();
+                    this.lastJumpInputTime = this.jumpBufferTime + 0.1;
+                }
+
+                // Update timers
+                this.lastGroundedTime += deltaTime;
+                this.lastJumpInputTime += deltaTime;
+
+                // Update debug info
+                this.updateDebugInfo();
+            }
+
+            jump() {
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
+
+                rigidbody.velocity.y = -this.jumpForce;
+                this.isGrounded = false;
+                this.lastGroundedTime = this.coyoteTime + 0.1;
+            }
+
+            onCollisionEnter(other) {
+                const otherCollider = other.getComponent(GameEngine.Collider);
+                if (otherCollider && otherCollider.layer === 'Platform') {
+                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                    if (rigidbody && rigidbody.velocity.y >= 0) {
+                        this.isGrounded = true;
+                        this.lastGroundedTime = 0;
+                        rigidbody.velocity.y = 0;
+                    }
+                }
+            }
+
+            updateDebugInfo() {
+                const pos = this.gameObject.transform.position;
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                const vel = rigidbody ? rigidbody.velocity : new GameEngine.Vector2(0, 0);
+
+                document.getElementById('player-pos').textContent = 
+                    `${Math.round(pos.x)}, ${Math.round(pos.y)}`;
+                document.getElementById('player-vel').textContent = 
+                    `${Math.round(vel.x)}, ${Math.round(vel.y)}`;
+                document.getElementById('player-grounded').textContent = 
+                    this.isGrounded.toString();
+            }
+        }
+
+        // Create test level
+        function createTestLevel() {
+            // Ground platform
+            gameScene.createGameObject('Ground')
+                .at(400, 550)
+                .withColor('#34495e', 800, 100)
+                .withCollider('box', 800, 100, false, 'Platform')
+                .build();
+
+            // Some floating platforms
+            gameScene.createGameObject('Platform1')
+                .at(200, 400)
+                .withColor('#2c3e50', 150, 30)
+                .withCollider('box', 150, 30, false, 'Platform')
+                .build();
+
+            gameScene.createGameObject('Platform2')
+                .at(500, 300)
+                .withColor('#2c3e50', 150, 30)
+                .withCollider('box', 150, 30, false, 'Platform')
+                .build();
+
+            gameScene.createGameObject('Platform3')
+                .at(100, 200)
+                .withColor('#2c3e50', 150, 30)
+                .withCollider('box', 150, 30, false, 'Platform')
+                .build();
+        }
+
+        // Create player
+        function createPlayer() {
+            player = gameScene.createGameObject('Player')
+                .at(400, 300)
+                .withColor('#3498db', 30, 40)
+                .withCollider('box', 30, 40, false, 'Player')
+                .withDynamicBody(1.0, 1.0)
+                .build();
+
+            // Configure Rigidbody
+            const rigidbody = player.getComponent(GameEngine.Rigidbody);
+            if (rigidbody) {
+                rigidbody.drag = 0.98;
+                rigidbody.gravity = new GameEngine.Vector2(0, 1000);
+            }
+
+            player.addComponent(new TestPlatformerPlayer());
+        }
+
+        // Setup physics
+        function setupPhysics() {
+            engine.physicsEngine.setCollisionRule('Player', 'Platform', true);
+        }
+
+        // Setup camera
+        function setupCamera() {
+            const camera = gameScene.camera;
+            camera.follow(player);
+            camera.setBounds(0, 0, 800, 600);
+        }
+
+        // FPS counter
+        let frameCount = 0;
+        let lastTime = 0;
+        function updateFPS(currentTime) {
+            frameCount++;
+            if (currentTime - lastTime >= 1000) {
+                const fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+                document.getElementById('fps').textContent = fps;
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+        }
+
+        // Initialize test
+        function initTest() {
+            createTestLevel();
+            createPlayer();
+            setupPhysics();
+            setupCamera();
+
+            engine.sceneManager.add('test', gameScene);
+            engine.sceneManager.load('test');
+            engine.start();
+
+            console.log('Platformer Physics Test Initialized!');
+            console.log('Controls: Arrow Keys = Move, Spacebar = Jump');
+        }
+
+        // Start when engine is ready
+        function waitForEngine() {
+            if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                initTest();
+            } else {
+                setTimeout(waitForEngine, 100);
+            }
+        }
+
+        window.addEventListener('load', waitForEngine);
+    </script>
+</body>
+</html>

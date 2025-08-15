@@ -103,6 +103,7 @@ class Debug {
   static showStats = true;
   static showProfiler = true;
   static showQuadtree = false;
+  static showPerformance = true;
   
   // Performance tracking
   static frameCount = 0;
@@ -199,6 +200,27 @@ class Debug {
   static getAverageRenderTime() {
     if (this.renderTimes.length === 0) return 0;
     return this.renderTimes.reduce((a, b) => a + b, 0) / this.renderTimes.length;
+  }
+  
+  static getPerformanceStats() {
+    return {
+      fps: this.fps,
+      avgFrameTime: this.getAverageFrameTime(),
+      avgUpdateTime: this.getAverageUpdateTime(),
+      avgRenderTime: this.getAverageRenderTime(),
+      collisionChecks: this.collisionChecks,
+      activeObjects: this.activeObjects,
+      memoryUsage: this.memoryUsage
+    };
+  }
+  
+  static resetStats() {
+    this.frameTimes = [];
+    this.updateTimes = [];
+    this.renderTimes = [];
+    this.collisionChecks = 0;
+    this.activeObjects = 0;
+    this.memoryUsage = 0;
   }
   
   // Profiling methods
@@ -1188,6 +1210,12 @@ class Rigidbody extends Component {
     // Apply drag
     this.velocity = this.velocity.multiplyByScalar(this.drag);
     
+    // Clamp velocity to prevent excessive speeds
+    const maxSpeed = 1000;
+    if (this.velocity.magnitude() > maxSpeed) {
+      this.velocity = this.velocity.normalize().multiplyByScalar(maxSpeed);
+    }
+    
     // Update position
     if (this.gameObject && this.gameObject.transform) {
       this.gameObject.transform.position = this.gameObject.transform.position.add(
@@ -1608,75 +1636,9 @@ class Player extends Component {
   }
 
   handlePlatformerInput(deltaTime) {
-    // console.log("Doing something", this.inputConfig);
-
-    let horizontalInput = 0;
-    if (this.inputManager.isKeyDown(this.inputConfig.left))
-      horizontalInput -= 1;
-    if (this.inputManager.isKeyDown(this.inputConfig.right))
-      horizontalInput += 1;
-
-    if (horizontalInput !== 0) {
-      this.velocity.x += horizontalInput * this.acceleration * deltaTime;
-      this.velocity.x = Math.max(
-        -this.maxSpeed,
-        Math.min(this.maxSpeed, this.velocity.x)
-      );
-      this.updateFacing(new Vector2(horizontalInput, 0));
-    } else {
-      const drag = this.isGrounded ? this.groundDrag : this.airDrag;
-      this.velocity.x *= drag;
-    }
-
-    if (this.inputManager.isKeyDown(this.inputConfig.jump)) {
-      this.lastJumpInputTime = 0;
-    }
-
-    if (
-      this.lastJumpInputTime < this.jumpBufferTime &&
-      (this.isGrounded || this.lastGroundedTime < this.coyoteTime)
-    ) {
-      this.jump();
-      this.lastJumpInputTime = this.jumpBufferTime;
-    }
-
-    // const wPressed = this.inputManager.isKeyPressed("KeyW");
-    // const spacePressed = this.inputManager.isKeyPressed("Space");
-    // const jumpPressed = this.inputManager.isKeyPressed(this.inputConfig.jump);
-
-    // console.log(
-    //   "Jump check - W:",
-    //   wPressed,
-    //   "Space:",
-    //   spacePressed,
-    //   "Jump config:",
-    //   jumpPressed
-    // );
-
-    // if (wPressed || spacePressed || jumpPressed) {
-    //   this.lastJumpInputTime = 0;
-    //   console.log("Jump input detected!");
-    // }
-
-    if (
-      this.inputManager.isKeyDown(this.inputConfig.jump) ||
-      this.inputManager.isKeyDown("Space")
-    ) {
-      this.lastJumpInputTime = 0;
-      console.log("Jump input detected");
-    }
-
-    // Jump conditions with better buffer and coyote time
-    const canJump =
-      (this.isGrounded || this.lastGroundedTime < this.coyoteTime) &&
-      this.lastJumpInputTime < this.jumpBufferTime &&
-      this.lastJumpInputTime >= 0;
-
-    if (canJump) {
-      this.jump();
-      this.lastJumpInputTime = this.jumpBufferTime + 0.1; // Prevent multiple jumps from same input
-      console.log("Jump executed!");
-    }
+    // This method is now handled by the AdvancedPlatformerPlayer class
+    // The base Player class should not handle platformer input when using Rigidbody
+    return;
   }
 
   handleRacingInput(deltaTime) {
@@ -1771,6 +1733,14 @@ class Player extends Component {
   }
 
   applyPhysics(deltaTime) {
+    // Check if this GameObject has a Rigidbody component
+    const rigidbody = this.gameObject.getComponent(Rigidbody);
+    if (rigidbody) {
+      // If using Rigidbody, don't apply physics here
+      return;
+    }
+    
+    // Only apply physics if no Rigidbody is present
     switch (this.movementType) {
       case "platformer":
         if (!this.isGrounded) {
@@ -1785,6 +1755,14 @@ class Player extends Component {
   }
 
   updatePosition(deltaTime) {
+    // Check if this GameObject has a Rigidbody component
+    const rigidbody = this.gameObject.getComponent(Rigidbody);
+    if (rigidbody) {
+      // If using Rigidbody, don't update position here
+      return;
+    }
+    
+    // Only update position if no Rigidbody is present
     const movement = this.velocity.multiplyByScalar(deltaTime);
     this.gameObject.transform.position =
       this.gameObject.transform.position.add(movement);
@@ -1959,6 +1937,9 @@ class Player extends Component {
     if (grounded && !wasGrounded) {
       this.lastGroundedTime = 0;
       if (this.onLanding) this.onLanding();
+    } else if (!grounded && wasGrounded) {
+      // Player just left the ground
+      this.lastGroundedTime = 0;
     }
   }
 
@@ -2916,6 +2897,9 @@ class InputManager {
       deadzone: 0.1
     };
     
+    // Event listener references for cleanup
+    this.eventListeners = new Map();
+    
     this.setupEventListeners();
     this.setupGamepadSupport();
   }
@@ -2923,18 +2907,42 @@ class InputManager {
   setCanvas(canvas) {
     this.canvas = canvas;
   }
+  
+  cleanup() {
+    // Remove all event listeners to prevent memory leaks
+    this.eventListeners.forEach((listener, event) => {
+      if (event.startsWith('canvas:')) {
+        const canvasEvent = event.replace('canvas:', '');
+        this.canvas?.removeEventListener(canvasEvent, listener);
+      } else {
+        window.removeEventListener(event, listener);
+      }
+    });
+    
+    this.eventListeners.clear();
+    this.keys.clear();
+    this.previousKeys.clear();
+    this.mouseButtons.clear();
+    this.previousMouseButtons.clear();
+    this.touches.clear();
+    this.previousTouches.clear();
+    this.touchStartPositions.clear();
+    this.gamepads.clear();
+    this.gamepadAxes.clear();
+    this.gamepadButtons.clear();
+  }
 
   setupEventListeners() {
-    window.addEventListener("keydown", (e) => {
+    const keydownHandler = (e) => {
       this.keys.set(e.code, true);
       e.preventDefault();
-    });
-
-    window.addEventListener("keyup", (e) => {
+    };
+    
+    const keyupHandler = (e) => {
       this.keys.set(e.code, false);
-    });
-
-    window.addEventListener("mousemove", (e) => {
+    };
+    
+    const mousemoveHandler = (e) => {
       if (this.canvas) {
         const rect = this.canvas.getBoundingClientRect();
         this.mousePosition.x = e.clientX - rect.left;
@@ -2943,18 +2951,34 @@ class InputManager {
         this.mousePosition.x = e.clientX;
         this.mousePosition.y = e.clientY;
       }
-    });
-
-    window.addEventListener("mousedown", (e) => {
+    };
+    
+    const mousedownHandler = (e) => {
       this.mouseButtons.set(e.button, true);
       e.preventDefault();
-    });
-
-    window.addEventListener("mouseup", (e) => {
+    };
+    
+    const mouseupHandler = (e) => {
       this.mouseButtons.set(e.button, false);
-    });
-
-    window.addEventListener("contextmenu", (e) => e.preventDefault());
+    };
+    
+    const contextmenuHandler = (e) => e.preventDefault();
+    
+    // Store references for cleanup
+    this.eventListeners.set('keydown', keydownHandler);
+    this.eventListeners.set('keyup', keyupHandler);
+    this.eventListeners.set('mousemove', mousemoveHandler);
+    this.eventListeners.set('mousedown', mousedownHandler);
+    this.eventListeners.set('mouseup', mouseupHandler);
+    this.eventListeners.set('contextmenu', contextmenuHandler);
+    
+    // Add event listeners
+    window.addEventListener("keydown", keydownHandler);
+    window.addEventListener("keyup", keyupHandler);
+    window.addEventListener("mousemove", mousemoveHandler);
+    window.addEventListener("mousedown", mousedownHandler);
+    window.addEventListener("mouseup", mouseupHandler);
+    window.addEventListener("contextmenu", contextmenuHandler);
     
     // Touch events
     if (this.canvas) {
@@ -4174,8 +4198,10 @@ class PhysicsEngine {
 
     const collidableObjects = scene.findGameObjectsWithComponent(Collider);
     
-    // Update quadtree
-    this.updateQuadtree(collidableObjects);
+    // Only update quadtree if objects have changed significantly
+    if (this.shouldUpdateQuadtree(collidableObjects)) {
+      this.updateQuadtree(collidableObjects);
+    }
     
     const currentCollisions = new Set();
 
@@ -4207,24 +4233,36 @@ class PhysicsEngine {
           currentCollisions.add(pairKey);
 
           if (!this.collisionPairs.has(pairKey)) {
-            colliderA.onCollisionEnter(objB);
-            colliderB.onCollisionEnter(objA);
-            this.collisionPairs.set(pairKey, { objA, objB });
+            try {
+              colliderA.onCollisionEnter(objB);
+              colliderB.onCollisionEnter(objA);
+              this.collisionPairs.set(pairKey, { objA, objB });
+            } catch (error) {
+              Debug.error("Error in collision enter:", error);
+            }
           }
 
-          colliderA.onCollision(objB);
-          colliderB.onCollision(objA);
-
-          this.resolveCollision(objA, objB);
+          try {
+            colliderA.onCollision(objB);
+            colliderB.onCollision(objA);
+            this.resolveCollision(objA, objB);
+          } catch (error) {
+            Debug.error("Error in collision resolution:", error);
+          }
         } else if (this.collisionPairs.has(pairKey)) {
           const pair = this.collisionPairs.get(pairKey);
-          pair.objA.getComponent(Collider)?.onCollisionExit(pair.objB);
-          pair.objB.getComponent(Collider)?.onCollisionExit(pair.objA);
+          try {
+            pair.objA.getComponent(Collider)?.onCollisionExit(pair.objB);
+            pair.objB.getComponent(Collider)?.onCollisionExit(pair.objA);
+          } catch (error) {
+            Debug.error("Error in collision exit:", error);
+          }
           this.collisionPairs.delete(pairKey);
         }
       }
     }
 
+    // Clean up old collision pairs
     for (const [key, pair] of this.collisionPairs) {
       if (!currentCollisions.has(key)) {
         this.collisionPairs.delete(key);
@@ -4236,8 +4274,29 @@ class PhysicsEngine {
     return idA < idB ? `${idA}-${idB}` : `${idB}-${idA}`;
   }
   
+  shouldUpdateQuadtree(objects) {
+    // Only update quadtree if number of objects changed significantly
+    if (!this.lastObjectCount) {
+      this.lastObjectCount = objects.length;
+      return true;
+    }
+    
+    const changeThreshold = Math.max(5, this.lastObjectCount * 0.1); // 10% change or 5 objects
+    const hasSignificantChange = Math.abs(objects.length - this.lastObjectCount) > changeThreshold;
+    
+    if (hasSignificantChange) {
+      this.lastObjectCount = objects.length;
+      return true;
+    }
+    
+    return false;
+  }
+  
   // Quadtree methods
   updateQuadtree(objects) {
+    // Dynamically adjust quadtree bounds based on object positions
+    this.updateQuadtreeBounds(objects);
+    
     this.quadtree = new Quadtree(this.quadtreeBounds, this.maxObjectsPerNode, this.maxDepth);
     
     for (const obj of objects) {
@@ -4252,6 +4311,34 @@ class PhysicsEngine {
         }
       }
     }
+  }
+  
+  updateQuadtreeBounds(objects) {
+    if (objects.length === 0) return;
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    for (const obj of objects) {
+      if (obj.active) {
+        const collider = obj.getComponent(Collider);
+        if (collider && collider.enabled) {
+          const bounds = collider.getBounds();
+          minX = Math.min(minX, bounds.left);
+          minY = Math.min(minY, bounds.top);
+          maxX = Math.max(maxX, bounds.right);
+          maxY = Math.max(maxY, bounds.bottom);
+        }
+      }
+    }
+    
+    // Add padding to bounds
+    const padding = 100;
+    this.quadtreeBounds = {
+      x: minX - padding,
+      y: minY - padding,
+      width: (maxX - minX) + padding * 2,
+      height: (maxY - minY) + padding * 2
+    };
   }
   
   getCollisionCandidates(obj) {
@@ -4281,8 +4368,7 @@ class PhysicsEngine {
     this.maxDepth = maxDepth;
   }
 
-  // Add this method to PhysicsEngine class
-  // Add or replace this method in PhysicsEngine class:
+  // Enhanced collision resolution for Player vs Platform interactions
   resolveCollision(objA, objB) {
     const colliderA = objA.getComponent(Collider);
     const colliderB = objB.getComponent(Collider);
@@ -4290,20 +4376,26 @@ class PhysicsEngine {
     // Skip if either is a trigger
     if (colliderA.isTrigger || colliderB.isTrigger) return;
 
-    // Only resolve Player vs Platform collisions
-    let player, platform;
+    // Handle Player vs Platform collisions specifically
+    let player, platform, playerCollider, platformCollider;
     if (colliderA.layer === "Player" && colliderB.layer === "Platform") {
       player = objA;
       platform = objB;
+      playerCollider = colliderA;
+      platformCollider = colliderB;
     } else if (colliderB.layer === "Player" && colliderA.layer === "Platform") {
       player = objB;
       platform = objA;
+      playerCollider = colliderB;
+      platformCollider = colliderA;
     } else {
-      return; // Not a player-platform collision
+      // For other collisions, use simple resolution
+      this.resolveSimpleCollision(objA, objB);
+      return;
     }
 
-    const playerBounds = player.getComponent(Collider).getBounds();
-    const platformBounds = platform.getComponent(Collider).getBounds();
+    const playerBounds = playerCollider.getBounds();
+    const platformBounds = platformCollider.getBounds();
 
     // Calculate overlap
     const overlapX = Math.min(
@@ -4316,23 +4408,76 @@ class PhysicsEngine {
     );
 
     // Only resolve if there's significant overlap
-    if (overlapX > 2 && overlapY > 2) {
+    if (overlapX > 1 && overlapY > 1) {
       if (overlapX < overlapY) {
-        // Horizontal collision
-        const moveX =
-          overlapX * (playerBounds.centerX < platformBounds.centerX ? -1 : 1);
-        player.transform.position.x += moveX * 0.5;
+        // Horizontal collision - push player away
+        const moveX = overlapX * (playerBounds.centerX < platformBounds.centerX ? -1 : 1);
+        player.transform.position.x += moveX;
+        
+        // Stop horizontal velocity
+        const rigidbody = player.getComponent(Rigidbody);
+        if (rigidbody) {
+          rigidbody.velocity.x = 0;
+        }
       } else {
-        // Vertical collision - push player up if coming from above
+        // Vertical collision
         if (playerBounds.centerY < platformBounds.centerY) {
-          player.transform.position.y =
-            platformBounds.top - playerBounds.height / 2;
+          // Player is above platform - land on it
+          player.transform.position.y = platformBounds.top - playerBounds.height / 2;
+          
+          // Stop downward velocity and set grounded
+          const rigidbody = player.getComponent(Rigidbody);
+          if (rigidbody && rigidbody.velocity.y > 0) {
+            rigidbody.velocity.y = 0;
+          }
+          
+          // Set player as grounded
           const playerComponent = player.getComponent(Player);
-          if (playerComponent && playerComponent.velocity.y > 0) {
-            playerComponent.velocity.y = 0;
+          if (playerComponent) {
+            playerComponent.setGrounded(true);
+          }
+        } else {
+          // Player is below platform - push down
+          const moveY = overlapY;
+          player.transform.position.y += moveY;
+          
+          // Stop upward velocity
+          const rigidbody = player.getComponent(Rigidbody);
+          if (rigidbody && rigidbody.velocity.y < 0) {
+            rigidbody.velocity.y = 0;
           }
         }
       }
+    }
+  }
+
+  // Simple collision resolution for non-player collisions
+  resolveSimpleCollision(objA, objB) {
+    const colliderA = objA.getComponent(Collider);
+    const colliderB = objB.getComponent(Collider);
+
+    if (colliderA.isTrigger || colliderB.isTrigger) return;
+
+    const boundsA = colliderA.getBounds();
+    const boundsB = colliderB.getBounds();
+
+    const overlapX = Math.min(
+      boundsA.right - boundsB.left,
+      boundsB.right - boundsA.left
+    );
+    const overlapY = Math.min(
+      boundsA.bottom - boundsB.top,
+      boundsB.bottom - boundsA.top
+    );
+
+    if (overlapX < overlapY) {
+      const moveX = (overlapX / 2) * (boundsA.centerX < boundsB.centerX ? -1 : 1);
+      objA.transform.position.x += moveX;
+      objB.transform.position.x -= moveX;
+    } else {
+      const moveY = (overlapY / 2) * (boundsA.centerY < boundsB.centerY ? -1 : 1);
+      objA.transform.position.y += moveY;
+      objB.transform.position.y -= moveY;
     }
   }
 
@@ -4353,36 +4498,7 @@ class PhysicsEngine {
     );
   }
 
-  resolveCollision(objA, objB) {
-    const colliderA = objA.getComponent(Collider);
-    const colliderB = objB.getComponent(Collider);
 
-    if (colliderA.isTrigger || colliderB.isTrigger) return;
-
-    const boundsA = colliderA.getBounds();
-    const boundsB = colliderB.getBounds();
-
-    const overlapX = Math.min(
-      boundsA.right - boundsB.left,
-      boundsB.right - boundsA.left
-    );
-    const overlapY = Math.min(
-      boundsA.bottom - boundsB.top,
-      boundsB.bottom - boundsA.top
-    );
-
-    if (overlapX < overlapY) {
-      const moveX =
-        (overlapX / 2) * (boundsA.centerX < boundsB.centerX ? -1 : 1);
-      objA.transform.position.x += moveX;
-      objB.transform.position.x -= moveX;
-    } else {
-      const moveY =
-        (overlapY / 2) * (boundsA.centerY < boundsB.centerY ? -1 : 1);
-      objA.transform.position.y += moveY;
-      objB.transform.position.y -= moveY;
-    }
-  }
 }
 
 class Renderer {
@@ -4570,6 +4686,7 @@ class GameLoop {
     }
 
     try {
+      // Update input once per frame
       this.engine.inputManager.update();
 
       while (this.accumulator >= this.timeStep) {
@@ -4586,7 +4703,6 @@ class GameLoop {
     }
 
     requestAnimationFrame(this._loop);
-    this.engine.inputManager.update(); // ← This MUST be called every frame
   };
 
   getFPS() {
@@ -4689,15 +4805,37 @@ class SeedFrameEngine {
   getFPS() {
     return this.gameLoop.getFPS();
   }
+  
+  getPerformanceStats() {
+    return Debug.getPerformanceStats();
+  }
+  
+  resetPerformanceStats() {
+    Debug.resetStats();
+  }
 
   destroy() {
     this.stop();
+    
+    // Cleanup scenes
     this.sceneManager.scenes.forEach((scene, name) => {
       this.sceneManager.remove(name);
     });
+    
+    // Cleanup input manager
+    this.inputManager.cleanup();
+    
+    // Cleanup asset manager
     this.assetManager.clear();
+    
+    // Cleanup event bus
     this.eventBus.clear();
+    
+    // Cleanup physics engine
+    this.physicsEngine.collisionPairs.clear();
+    this.physicsEngine.quadtree = null;
 
+    // Remove canvas
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
     }
