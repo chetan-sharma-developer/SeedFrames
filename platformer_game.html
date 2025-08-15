@@ -83,6 +83,11 @@
             <div>Score: <span id="score">0</span></div>
             <div>Lives: <span id="lives">3</span></div>
             <div>Level: <span id="level">1</span></div>
+            <div id="performance-stats" style="display: none;">
+                <div>FPS: <span id="fps">0</span></div>
+                <div>Objects: <span id="object-count">0</span></div>
+                <div>Collisions: <span id="collision-count">0</span></div>
+            </div>
         </div>
         
         <div id="game-over-screen">
@@ -92,7 +97,7 @@
         </div>
         
         <div id="instructions">
-            Arrow Keys: Move | Spacebar: Jump | X: Double Jump | Z: Dash | R: Restart | M: Toggle Sound
+            Arrow Keys: Move | Spacebar: Jump | X: Double Jump | Z: Dash | R: Restart | M: Toggle Sound | P: Performance Stats
         </div>
         
         <div id="start-prompt" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
@@ -1033,6 +1038,42 @@
 
         // ==================== PARTICLE SYSTEM ====================
         
+        // Object pool for particles to improve performance
+        class ParticlePool {
+            constructor(maxSize = 100) {
+                this.pool = [];
+                this.maxSize = maxSize;
+                this.activeParticles = [];
+            }
+            
+            get() {
+                if (this.pool.length > 0) {
+                    return this.pool.pop();
+                }
+                return null;
+            }
+            
+            return(particle) {
+                if (this.pool.length < this.maxSize) {
+                    this.pool.push(particle);
+                }
+            }
+            
+            cleanup() {
+                this.activeParticles = this.activeParticles.filter(particle => {
+                    if (!particle || !particle.gameObject || !particle.gameObject.active) {
+                        if (particle) {
+                            this.return(particle);
+                        }
+                        return false;
+                    }
+                    return true;
+                });
+            }
+        }
+        
+        const particlePool = new ParticlePool(200);
+        
         function createCollectEffect(position, type) {
             const color = type === 'gem' ? '#ff00ff' : '#ffff00';
             for (let i = 0; i < 6; i++) {
@@ -1271,12 +1312,20 @@
 
         // ==================== INPUT HANDLING ====================
         
+        function updatePerformanceStats() {
+            const stats = engine.getPerformanceStats();
+            document.getElementById('fps').textContent = stats.fps || 0;
+            document.getElementById('object-count').textContent = stats.activeObjects || 0;
+            document.getElementById('collision-count').textContent = stats.collisionChecks || 0;
+        }
+        
         function setupInputHandling() {
             // Create input handler component that checks for key presses each frame
             const inputHandler = new class extends GameEngine.Component {
                 constructor() {
                     super();
                     this.previousKeys = new Map();
+                    this.frameCount = 0;
                 }
                 
                 update(deltaTime) {
@@ -1302,8 +1351,19 @@
                         console.log(`Sound ${soundEnabled ? 'enabled' : 'disabled'}`);
                     }
                     
+                    if (this.isKeyJustPressed('KeyP')) {
+                        const perfStats = document.getElementById('performance-stats');
+                        perfStats.style.display = perfStats.style.display === 'none' ? 'block' : 'none';
+                    }
+                    
                     // Update previous keys state
                     this.updatePreviousKeys();
+                    
+                    // Update performance stats every 10 frames
+                    if (this.frameCount % 10 === 0) {
+                        updatePerformanceStats();
+                    }
+                    this.frameCount++;
                 }
                 
                 isKeyJustPressed(keyCode) {

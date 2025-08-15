@@ -103,6 +103,7 @@ class Debug {
   static showStats = true;
   static showProfiler = true;
   static showQuadtree = false;
+  static showPerformance = true;
   
   // Performance tracking
   static frameCount = 0;
@@ -199,6 +200,27 @@ class Debug {
   static getAverageRenderTime() {
     if (this.renderTimes.length === 0) return 0;
     return this.renderTimes.reduce((a, b) => a + b, 0) / this.renderTimes.length;
+  }
+  
+  static getPerformanceStats() {
+    return {
+      fps: this.fps,
+      avgFrameTime: this.getAverageFrameTime(),
+      avgUpdateTime: this.getAverageUpdateTime(),
+      avgRenderTime: this.getAverageRenderTime(),
+      collisionChecks: this.collisionChecks,
+      activeObjects: this.activeObjects,
+      memoryUsage: this.memoryUsage
+    };
+  }
+  
+  static resetStats() {
+    this.frameTimes = [];
+    this.updateTimes = [];
+    this.renderTimes = [];
+    this.collisionChecks = 0;
+    this.activeObjects = 0;
+    this.memoryUsage = 0;
   }
   
   // Profiling methods
@@ -2875,6 +2897,9 @@ class InputManager {
       deadzone: 0.1
     };
     
+    // Event listener references for cleanup
+    this.eventListeners = new Map();
+    
     this.setupEventListeners();
     this.setupGamepadSupport();
   }
@@ -2882,18 +2907,42 @@ class InputManager {
   setCanvas(canvas) {
     this.canvas = canvas;
   }
+  
+  cleanup() {
+    // Remove all event listeners to prevent memory leaks
+    this.eventListeners.forEach((listener, event) => {
+      if (event.startsWith('canvas:')) {
+        const canvasEvent = event.replace('canvas:', '');
+        this.canvas?.removeEventListener(canvasEvent, listener);
+      } else {
+        window.removeEventListener(event, listener);
+      }
+    });
+    
+    this.eventListeners.clear();
+    this.keys.clear();
+    this.previousKeys.clear();
+    this.mouseButtons.clear();
+    this.previousMouseButtons.clear();
+    this.touches.clear();
+    this.previousTouches.clear();
+    this.touchStartPositions.clear();
+    this.gamepads.clear();
+    this.gamepadAxes.clear();
+    this.gamepadButtons.clear();
+  }
 
   setupEventListeners() {
-    window.addEventListener("keydown", (e) => {
+    const keydownHandler = (e) => {
       this.keys.set(e.code, true);
       e.preventDefault();
-    });
-
-    window.addEventListener("keyup", (e) => {
+    };
+    
+    const keyupHandler = (e) => {
       this.keys.set(e.code, false);
-    });
-
-    window.addEventListener("mousemove", (e) => {
+    };
+    
+    const mousemoveHandler = (e) => {
       if (this.canvas) {
         const rect = this.canvas.getBoundingClientRect();
         this.mousePosition.x = e.clientX - rect.left;
@@ -2902,18 +2951,34 @@ class InputManager {
         this.mousePosition.x = e.clientX;
         this.mousePosition.y = e.clientY;
       }
-    });
-
-    window.addEventListener("mousedown", (e) => {
+    };
+    
+    const mousedownHandler = (e) => {
       this.mouseButtons.set(e.button, true);
       e.preventDefault();
-    });
-
-    window.addEventListener("mouseup", (e) => {
+    };
+    
+    const mouseupHandler = (e) => {
       this.mouseButtons.set(e.button, false);
-    });
-
-    window.addEventListener("contextmenu", (e) => e.preventDefault());
+    };
+    
+    const contextmenuHandler = (e) => e.preventDefault();
+    
+    // Store references for cleanup
+    this.eventListeners.set('keydown', keydownHandler);
+    this.eventListeners.set('keyup', keyupHandler);
+    this.eventListeners.set('mousemove', mousemoveHandler);
+    this.eventListeners.set('mousedown', mousedownHandler);
+    this.eventListeners.set('mouseup', mouseupHandler);
+    this.eventListeners.set('contextmenu', contextmenuHandler);
+    
+    // Add event listeners
+    window.addEventListener("keydown", keydownHandler);
+    window.addEventListener("keyup", keyupHandler);
+    window.addEventListener("mousemove", mousemoveHandler);
+    window.addEventListener("mousedown", mousedownHandler);
+    window.addEventListener("mouseup", mouseupHandler);
+    window.addEventListener("contextmenu", contextmenuHandler);
     
     // Touch events
     if (this.canvas) {
@@ -4133,8 +4198,10 @@ class PhysicsEngine {
 
     const collidableObjects = scene.findGameObjectsWithComponent(Collider);
     
-    // Update quadtree
-    this.updateQuadtree(collidableObjects);
+    // Only update quadtree if objects have changed significantly
+    if (this.shouldUpdateQuadtree(collidableObjects)) {
+      this.updateQuadtree(collidableObjects);
+    }
     
     const currentCollisions = new Set();
 
@@ -4166,24 +4233,36 @@ class PhysicsEngine {
           currentCollisions.add(pairKey);
 
           if (!this.collisionPairs.has(pairKey)) {
-            colliderA.onCollisionEnter(objB);
-            colliderB.onCollisionEnter(objA);
-            this.collisionPairs.set(pairKey, { objA, objB });
+            try {
+              colliderA.onCollisionEnter(objB);
+              colliderB.onCollisionEnter(objA);
+              this.collisionPairs.set(pairKey, { objA, objB });
+            } catch (error) {
+              Debug.error("Error in collision enter:", error);
+            }
           }
 
-          colliderA.onCollision(objB);
-          colliderB.onCollision(objA);
-
-          this.resolveCollision(objA, objB);
+          try {
+            colliderA.onCollision(objB);
+            colliderB.onCollision(objA);
+            this.resolveCollision(objA, objB);
+          } catch (error) {
+            Debug.error("Error in collision resolution:", error);
+          }
         } else if (this.collisionPairs.has(pairKey)) {
           const pair = this.collisionPairs.get(pairKey);
-          pair.objA.getComponent(Collider)?.onCollisionExit(pair.objB);
-          pair.objB.getComponent(Collider)?.onCollisionExit(pair.objA);
+          try {
+            pair.objA.getComponent(Collider)?.onCollisionExit(pair.objB);
+            pair.objB.getComponent(Collider)?.onCollisionExit(pair.objA);
+          } catch (error) {
+            Debug.error("Error in collision exit:", error);
+          }
           this.collisionPairs.delete(pairKey);
         }
       }
     }
 
+    // Clean up old collision pairs
     for (const [key, pair] of this.collisionPairs) {
       if (!currentCollisions.has(key)) {
         this.collisionPairs.delete(key);
@@ -4195,8 +4274,29 @@ class PhysicsEngine {
     return idA < idB ? `${idA}-${idB}` : `${idB}-${idA}`;
   }
   
+  shouldUpdateQuadtree(objects) {
+    // Only update quadtree if number of objects changed significantly
+    if (!this.lastObjectCount) {
+      this.lastObjectCount = objects.length;
+      return true;
+    }
+    
+    const changeThreshold = Math.max(5, this.lastObjectCount * 0.1); // 10% change or 5 objects
+    const hasSignificantChange = Math.abs(objects.length - this.lastObjectCount) > changeThreshold;
+    
+    if (hasSignificantChange) {
+      this.lastObjectCount = objects.length;
+      return true;
+    }
+    
+    return false;
+  }
+  
   // Quadtree methods
   updateQuadtree(objects) {
+    // Dynamically adjust quadtree bounds based on object positions
+    this.updateQuadtreeBounds(objects);
+    
     this.quadtree = new Quadtree(this.quadtreeBounds, this.maxObjectsPerNode, this.maxDepth);
     
     for (const obj of objects) {
@@ -4211,6 +4311,34 @@ class PhysicsEngine {
         }
       }
     }
+  }
+  
+  updateQuadtreeBounds(objects) {
+    if (objects.length === 0) return;
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    for (const obj of objects) {
+      if (obj.active) {
+        const collider = obj.getComponent(Collider);
+        if (collider && collider.enabled) {
+          const bounds = collider.getBounds();
+          minX = Math.min(minX, bounds.left);
+          minY = Math.min(minY, bounds.top);
+          maxX = Math.max(maxX, bounds.right);
+          maxY = Math.max(maxY, bounds.bottom);
+        }
+      }
+    }
+    
+    // Add padding to bounds
+    const padding = 100;
+    this.quadtreeBounds = {
+      x: minX - padding,
+      y: minY - padding,
+      width: (maxX - minX) + padding * 2,
+      height: (maxY - minY) + padding * 2
+    };
   }
   
   getCollisionCandidates(obj) {
@@ -4558,6 +4686,7 @@ class GameLoop {
     }
 
     try {
+      // Update input once per frame
       this.engine.inputManager.update();
 
       while (this.accumulator >= this.timeStep) {
@@ -4574,7 +4703,6 @@ class GameLoop {
     }
 
     requestAnimationFrame(this._loop);
-    this.engine.inputManager.update(); // ← This MUST be called every frame
   };
 
   getFPS() {
@@ -4677,15 +4805,37 @@ class SeedFrameEngine {
   getFPS() {
     return this.gameLoop.getFPS();
   }
+  
+  getPerformanceStats() {
+    return Debug.getPerformanceStats();
+  }
+  
+  resetPerformanceStats() {
+    Debug.resetStats();
+  }
 
   destroy() {
     this.stop();
+    
+    // Cleanup scenes
     this.sceneManager.scenes.forEach((scene, name) => {
       this.sceneManager.remove(name);
     });
+    
+    // Cleanup input manager
+    this.inputManager.cleanup();
+    
+    // Cleanup asset manager
     this.assetManager.clear();
+    
+    // Cleanup event bus
     this.eventBus.clear();
+    
+    // Cleanup physics engine
+    this.physicsEngine.collisionPairs.clear();
+    this.physicsEngine.quadtree = null;
 
+    // Remove canvas
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
     }
