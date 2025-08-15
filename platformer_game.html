@@ -375,6 +375,8 @@
                 if (!playerCollider) return;
                 
                 let foundGround = false;
+                let closestPlatform = null;
+                let closestDistance = Infinity;
                 
                 // Check collision with all platforms
                 platforms.forEach(platform => {
@@ -386,27 +388,54 @@
                     const playerPos = this.gameObject.transform.position;
                     const platformPos = platform.transform.position;
                     
-                    // Check if player is above the platform
+                    // Calculate collision bounds
                     const playerBottom = playerPos.y + (playerCollider.height / 2);
+                    const playerTop = playerPos.y - (playerCollider.height / 2);
                     const platformTop = platformPos.y - (platformCollider.height / 2);
+                    const platformBottom = platformPos.y + (platformCollider.height / 2);
                     const platformLeft = platformPos.x - (platformCollider.width / 2);
                     const platformRight = platformPos.x + (platformCollider.width / 2);
                     const playerLeft = playerPos.x - (playerCollider.width / 2);
                     const playerRight = playerPos.x + (playerCollider.width / 2);
                     
-                    // Check if horizontally overlapping and vertically close
+                    // Check for AABB collision
                     const horizontalOverlap = playerRight > platformLeft && playerLeft < platformRight;
-                    const verticallyClose = Math.abs(playerBottom - platformTop) < 5;
+                    const verticalOverlap = playerBottom > platformTop && playerTop < platformBottom;
                     
-                    if (horizontalOverlap && verticallyClose && this.velocity.y >= 0) {
-                        foundGround = true;
-                        // Snap to platform top
-                        this.gameObject.transform.position.y = platformTop - (playerCollider.height / 2);
-                        this.velocity.y = 0;
-                        this.isGrounded = true;
-                        this.lastGroundedTime = 0;
+                    if (horizontalOverlap && verticalOverlap) {
+                        // Determine collision resolution based on approach direction
+                        const overlapLeft = playerRight - platformLeft;
+                        const overlapRight = platformRight - playerLeft;
+                        const overlapTop = playerBottom - platformTop;
+                        const overlapBottom = platformBottom - playerTop;
+                        
+                        // Find minimum overlap (this determines resolution direction)
+                        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+                        
+                        // Only resolve collision from above (landing on platform)
+                        if (minOverlap === overlapTop && this.velocity.y >= 0) {
+                            const distance = Math.abs(playerBottom - platformTop);
+                            if (distance < closestDistance) {
+                                closestDistance = distance;
+                                closestPlatform = platform;
+                            }
+                        }
                     }
                 });
+                
+                // Apply collision resolution for closest platform
+                if (closestPlatform) {
+                    const platformCollider = closestPlatform.getComponent(GameEngine.Collider);
+                    const platformPos = closestPlatform.transform.position;
+                    const platformTop = platformPos.y - (platformCollider.height / 2);
+                    
+                    // Snap player to platform top
+                    this.gameObject.transform.position.y = platformTop - (playerCollider.height / 2);
+                    this.velocity.y = 0;
+                    this.isGrounded = true;
+                    this.lastGroundedTime = 0;
+                    foundGround = true;
+                }
                 
                 // If no ground found and player was grounded, mark as not grounded
                 if (!foundGround && this.velocity.y > 0) {
@@ -910,6 +939,9 @@
                 .withCollider('box', width, height, false, 'Platform')
                 .build();
             
+            // Make sure platforms are static (no Rigidbody needed)
+            // Platforms should NOT have Rigidbody components to remain static
+            
             platforms.push(platform);
             return platform;
         }
@@ -921,24 +953,34 @@
                 .withCollider('box', width, height, false, 'Platform')
                 .build();
             
+            // Moving platforms use script-based movement, not physics
+            // They should NOT have Rigidbody components
             platform.addComponent(new MovingPlatform(150, 80, direction));
             platforms.push(platform);
             return platform;
         }
         
         function createEnemy(x, y, type = 'patrol', speed = 100) {
-            const enemy = gameScene.createGameObject(`Enemy_${x}_${y}`)
-                .at(x, y)
-                .withColor('#e74c3c', 24, 24)
-                .withCollider('box', 24, 24, false, 'Enemy')
-                .build();
-            
-            enemy.addComponent(new EnemyAI(type, speed));
+            let enemy;
             
             if (type === 'jump') {
-                enemy.addComponent(new GameEngine.Rigidbody());
+                // Jumping enemies need physics for gravity
+                enemy = gameScene.createGameObject(`Enemy_${x}_${y}`)
+                    .at(x, y)
+                    .withColor('#e74c3c', 24, 24)
+                    .withCollider('box', 24, 24, false, 'Enemy')
+                    .withDynamicBody(0.8, 1.0)
+                    .build();
+            } else {
+                // Patrol and chase enemies move via script, no physics needed
+                enemy = gameScene.createGameObject(`Enemy_${x}_${y}`)
+                    .at(x, y)
+                    .withColor('#e74c3c', 24, 24)
+                    .withCollider('box', 24, 24, false, 'Enemy')
+                    .build();
             }
             
+            enemy.addComponent(new EnemyAI(type, speed));
             enemies.push(enemy);
             return enemy;
         }
@@ -984,7 +1026,7 @@
                 .at(gameState.playerStartX, gameState.playerStartY)
                 .withColor('#3498db', 24, 32)
                 .withCollider('box', 24, 32, false, 'Player')
-                .withComponent(new GameEngine.Rigidbody())
+                .withDynamicBody(1.0, 1.0)
                 .build();
             
             player.addComponent(new AdvancedPlatformerPlayer({

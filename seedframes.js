@@ -1114,7 +1114,7 @@ class Collider extends Component {
 }
 
 class Rigidbody extends Component {
-  constructor(mass = 1.0, gravityScale = 1.0) {
+  constructor(mass = 1.0, gravityScale = 1.0, bodyType = 'dynamic') {
     super();
     this.mass = mass;
     this.gravityScale = gravityScale;
@@ -1125,6 +1125,32 @@ class Rigidbody extends Component {
     this.gravity = new Vector2(0, 9.8 * gravityScale);
     this.useGravity = true;
     this.isKinematic = false;
+    
+    // Body types: 'static', 'kinematic', 'dynamic'
+    this.bodyType = bodyType;
+    this.setBodyType(bodyType);
+  }
+  
+  setBodyType(type) {
+    this.bodyType = type;
+    switch (type) {
+      case 'static':
+        this.isKinematic = true;
+        this.useGravity = false;
+        this.mass = Infinity;
+        this.velocity = new Vector2(0, 0);
+        break;
+      case 'kinematic':
+        this.isKinematic = true;
+        this.useGravity = false;
+        this.mass = Infinity;
+        break;
+      case 'dynamic':
+        this.isKinematic = false;
+        this.useGravity = true;
+        this.mass = Math.max(0.1, this.mass);
+        break;
+    }
   }
 
   addForce(force) {
@@ -2561,6 +2587,24 @@ class GameObjectBuilder {
     const audio = new AudioSource(audioSrc, volume, loop);
     this.gameObject.addComponent(audio);
     return this;
+  }
+
+  withRigidbody(mass = 1.0, gravityScale = 1.0, bodyType = 'dynamic') {
+    const rigidbody = new Rigidbody(mass, gravityScale, bodyType);
+    this.gameObject.addComponent(rigidbody);
+    return this;
+  }
+
+  withStaticBody() {
+    return this.withRigidbody(Infinity, 0, 'static');
+  }
+
+  withKinematicBody(mass = 1.0) {
+    return this.withRigidbody(mass, 0, 'kinematic');
+  }
+
+  withDynamicBody(mass = 1.0, gravityScale = 1.0) {
+    return this.withRigidbody(mass, gravityScale, 'dynamic');
   }
 
   build() {
