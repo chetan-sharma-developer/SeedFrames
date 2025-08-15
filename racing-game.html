@@ -230,6 +230,7 @@
                 
                 scene = engine.createScene('RacingTrack');
                 engine.sceneManager.add('main', scene);
+                engine.sceneManager.load('main');
                 
                 // Setup physics
                 engine.physicsEngine.setCollisionRule('Player', 'TrackBoundary', true);

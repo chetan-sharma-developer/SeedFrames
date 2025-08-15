@@ -169,6 +169,7 @@
                 
                 scene = engine.createScene('PlatformerLevel');
                 engine.sceneManager.add('main', scene);
+                engine.sceneManager.load('main');
                 
                 // Setup physics
                 engine.physicsEngine.setCollisionRule('Player', 'Platform', true);

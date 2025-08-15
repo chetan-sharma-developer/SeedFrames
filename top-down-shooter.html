@@ -207,6 +207,7 @@
                 
                 scene = engine.createScene('ShooterArena');
                 engine.sceneManager.add('main', scene);
+                engine.sceneManager.load('main');
                 
                 // Setup physics
                 engine.physicsEngine.setCollisionRule('Player', 'Enemy', true);
