@@ -818,6 +818,18 @@ class SpriteRenderer extends Component {
     this.image.src = src;
   }
 
+  setImage(imageElement) {
+    this.image = imageElement;
+    this.imageSrc = null;
+    this.color = null;
+    this.loaded = !!imageElement;
+    if (imageElement && (!this.width || !this.height)) {
+      // Default to natural size if width/height not set
+      this.width = imageElement.naturalWidth || this.width || 32;
+      this.height = imageElement.naturalHeight || this.height || 32;
+    }
+  }
+
   draw(ctx, camera) {
     if (!this.gameObject) return;
 
@@ -2457,6 +2469,28 @@ class GameObjectBuilder {
     return this;
   }
 
+  asset(name, width = null, height = null, layer = 0) {
+    const engine = this.scene && this.scene.engine;
+    if (!engine || !engine.assetManager) {
+      Debug.warn("Engine or AssetManager not available for asset() call");
+      return this;
+    }
+    const img = engine.assetManager.getNamedImage(name);
+    if (!img) {
+      Debug.warn(`Asset '${name}' not found. Did you call engine.assetManagement(...) before starting?`);
+      return this;
+    }
+    let sprite = this.gameObject.getComponent(SpriteRenderer);
+    if (!sprite) {
+      sprite = new SpriteRenderer(null, width || img.naturalWidth || 32, height || img.naturalHeight || 32, layer);
+      this.gameObject.addComponent(sprite);
+    }
+    if (width) sprite.width = width;
+    if (height) sprite.height = height;
+    sprite.setImage(img);
+    return this;
+  }
+
   withColor(color, width = 32, height = 32, layer = 0) {
     const sprite = new SpriteRenderer(null, width, height, layer);
     sprite.setColor(color);
@@ -3579,37 +3613,124 @@ class AssetManager {
     this.retryAttempts = new Map();
     this.maxRetries = 3;
     
+    // Named assets
+    this.namedImages = new Map();
+    this.namedAudio = new Map();
+    
     // Create placeholder assets
     this.createPlaceholderAssets();
   }
   
-  createPlaceholderAssets() {
-    // Create a simple colored rectangle as image placeholder
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    
-    // Draw placeholder pattern
-    ctx.fillStyle = '#ff6b6b';
-    ctx.fillRect(0, 0, 64, 64);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(8, 8, 48, 48);
-    ctx.fillStyle = '#ff6b6b';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('404', 32, 32);
-    ctx.fillText('Image', 32, 48);
-    
-    const placeholderImage = new Image();
-    placeholderImage.src = canvas.toDataURL();
-    
-    this.placeholderAssets.set('image', placeholderImage);
-    
-    // Create placeholder audio (silent)
-    const placeholderAudio = new Audio();
-    placeholderAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-    this.placeholderAssets.set('audio', placeholderAudio);
+  // Register a batch of assets by name
+  async registerAssets(assets = {}) {
+    const tasks = [];
+    for (const [name, value] of Object.entries(assets)) {
+      tasks.push(this.registerAsset(name, value));
+    }
+    return Promise.all(tasks);
+  }
+  
+  // Register a single asset by name
+  async registerAsset(name, value) {
+    if (!name) return;
+    // SVG helper object
+    if (value && typeof value === 'object' && value.__kind === 'svg' && typeof value.data === 'string') {
+      return this.registerSVG(name, value.data);
+    }
+    // Raw SVG string
+    if (typeof value === 'string' && value.trim().startsWith('<svg')) {
+      return this.registerSVG(name, value);
+    }
+    // URL strings: decide by extension
+    if (typeof value === 'string') {
+      if (/\.(mp3|wav|ogg)(\?.*)?$/i.test(value)) {
+        return this.registerAudio(name, value);
+      }
+      // Image (including external .svg)
+      return this.registerImage(name, value);
+    }
+    // Direct elements
+    if (value instanceof HTMLImageElement) {
+      this.namedImages.set(name, value);
+      this.imageCache.set(name, value);
+      this.loadedAssets++;
+      return value;
+    }
+    if (value instanceof HTMLAudioElement) {
+      this.namedAudio.set(name, value);
+      this.audioCache.set(name, value);
+      this.loadedAssets++;
+      return value;
+    }
+    // Unsupported type
+    Debug.warn(`Unsupported asset type for '${name}'`);
+    return null;
+  }
+  
+  async registerImage(name, src) {
+    const img = new Image();
+    return new Promise((resolve) => {
+      img.onload = () => {
+        this.namedImages.set(name, img);
+        this.imageCache.set(name, img);
+        this.loadedAssets++;
+        this.eventBus.emit('asset_loaded', { type: 'image', name, asset: img });
+        resolve(img);
+      };
+      img.onerror = () => {
+        Debug.error(`Failed to register image '${name}' from ${src}`);
+        const placeholder = this.placeholderAssets.get('image');
+        this.namedImages.set(name, placeholder);
+        resolve(placeholder);
+      };
+      img.src = src;
+    });
+  }
+  
+  async registerSVG(name, svgString) {
+    try {
+      const blob = new Blob([svgString], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      return this.registerImage(name, url).then((img) => {
+        // Keep URL for cleanup if needed
+        img.__objectUrl = url;
+        return img;
+      });
+    } catch (e) {
+      Debug.error(`Failed to register SVG '${name}':`, e);
+      const placeholder = this.placeholderAssets.get('image');
+      this.namedImages.set(name, placeholder);
+      return placeholder;
+    }
+  }
+  
+  async registerAudio(name, src) {
+    const audio = new Audio();
+    return new Promise((resolve) => {
+      audio.oncanplaythrough = () => {
+        this.namedAudio.set(name, audio);
+        this.audioCache.set(name, audio);
+        this.loadedAssets++;
+        this.eventBus.emit('asset_loaded', { type: 'audio', name, asset: audio });
+        resolve(audio);
+      };
+      audio.onerror = () => {
+        Debug.error(`Failed to register audio '${name}' from ${src}`);
+        const placeholder = this.placeholderAssets.get('audio');
+        this.namedAudio.set(name, placeholder);
+        resolve(placeholder);
+      };
+      audio.src = src;
+      audio.load();
+    });
+  }
+  
+  getNamedImage(name) {
+    return this.namedImages.get(name);
+  }
+  
+  getNamedAudio(name) {
+    return this.namedAudio.get(name);
   }
 
   async loadImage(path) {
@@ -4388,8 +4509,8 @@ class SeedFrameEngine {
     this.config = {
       width: 800,
       height: 600,
-      containerId: "game-container",
-      backgroundColor: "#222222",
+      containerId: null,
+      backgroundColor: "#000000",
       debug: false,
       ...config,
     };
@@ -4407,13 +4528,14 @@ class SeedFrameEngine {
     this.renderer = new Renderer(this.canvas, this.ctx);
     this.gameLoop = new GameLoop(this);
 
-    this.renderer.setBackgroundColor(this.config.backgroundColor);
     this.eventBus = new EventBus();
 
-    Debug.log(
-      "Enhanced 2D Game Engine with Quality of Life features initialized",
-      this.config
-    );
+    this.renderer.backgroundColor = this.config.backgroundColor;
+  }
+
+  // Allow registering named assets prior to starting the game
+  async assetManagement({ assets = {} } = {}) {
+    return this.assetManager.registerAssets(assets);
   }
 
   createCanvas() {
@@ -4529,6 +4651,8 @@ if (typeof module !== "undefined" && module.exports) {
     ParticleEmitter,
     Timer,
     TimerManager,
+    // Helpers
+    SVG,
   };
 }
 
@@ -4567,6 +4691,8 @@ if (typeof window !== "undefined") {
     ParticleEmitter,
     Timer,
     TimerManager,
+    // Helpers
+    SVG,
   };
 }
 
@@ -4685,6 +4811,8 @@ if (typeof window !== "undefined" && !window.GameEngine) {
     ParticleEmitter,
     Timer,
     TimerManager,
+    // Helpers
+    SVG,
   };
 }
 
@@ -4740,6 +4868,8 @@ if (typeof window !== "undefined") {
     ParticleEmitter,
     Timer,
     TimerManager,
+    // Helpers
+    SVG,
   };
   
   // Merge with existing GameEngine
