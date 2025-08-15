@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Platformer Test - SeedFrames Engine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #333;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #game-container {
+            border: 2px solid #666;
+            margin: 0 auto;
+            display: block;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            background: #444;
+            border-radius: 5px;
+        }
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: #555;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h3>Platformer Test - Controls</h3>
+        <p><strong>A/D or Arrow Keys:</strong> Move Left/Right</p>
+        <p><strong>Space or W:</strong> Jump</p>
+        <p><strong>Debug Info:</strong> Check browser console for collision logs</p>
+    </div>
+    
+    <canvas id="game-container" width="800" height="600"></canvas>
+    
+    <div class="status" id="status">
+        <p>Player Status: <span id="player-status">Loading...</span></p>
+        <p>Grounded: <span id="grounded-status">Unknown</span></p>
+        <p>Velocity: <span id="velocity-status">Unknown</span></p>
+    </div>
+
+    <script src="./seedframes.js"></script>
+    <script>
+        // Initialize engine
+        const engine = new GameEngine.Engine({
+            width: 800,
+            height: 600,
+            containerId: 'game-container',
+            backgroundColor: '#87CEEB'
+        });
+
+        // Create scene
+        const gameScene = engine.createScene('MainScene');
+
+        // Create player using fluent API
+        const player = gameScene.createGameObject('Player')
+            .at(100, 300)
+            .withColor('#4a90e2', 32, 48)
+            .withCollider('box', 32, 48, false, 'Player')
+            .withPlatformerPlayer({
+                speed: 250,
+                jumpForce: 450,
+                gravity: 1200,
+                onJump: () => console.log('Jump executed!'),
+                onLanding: () => console.log('Player landed!'),
+                onStateChange: (newState, oldState) => {
+                    console.log(`Player state changed: ${oldState} -> ${newState}`);
+                    document.getElementById('player-status').textContent = newState;
+                }
+            })
+            .build();
+
+        // Create ground platform
+        const ground = gameScene.createGameObject('Ground')
+            .at(400, 550)
+            .withColor('#8B4513', 800, 40)
+            .withCollider('box', 800, 40, false, 'Platform')
+            .build();
+
+        // Create floating platforms
+        const platform1 = gameScene.createGameObject('Platform1')
+            .at(300, 450)
+            .withColor('#228B22', 150, 30)
+            .withCollider('box', 150, 30, false, 'Platform')
+            .build();
+
+        const platform2 = gameScene.createGameObject('Platform2')
+            .at(500, 350)
+            .withColor('#228B22', 150, 30)
+            .withCollider('box', 150, 30, false, 'Platform')
+            .build();
+
+        const platform3 = gameScene.createGameObject('Platform3')
+            .at(200, 250)
+            .withColor('#228B22', 150, 30)
+            .withCollider('box', 150, 30, false, 'Platform')
+            .build();
+
+        // Setup physics
+        engine.physicsEngine.setCollisionRule('Player', 'Platform', true);
+
+        // Follow player with camera
+        gameScene.camera.follow(player);
+
+        // Status update loop
+        function updateStatus() {
+            const playerComponent = player.getComponent(GameEngine.PlatformerPlayer);
+            if (playerComponent) {
+                document.getElementById('grounded-status').textContent = playerComponent.isGrounded ? 'Yes' : 'No';
+                document.getElementById('velocity-status').textContent = 
+                    `X: ${playerComponent.velocity.x.toFixed(1)}, Y: ${playerComponent.velocity.y.toFixed(1)}`;
+            }
+        }
+
+        // Add status update to game loop
+        const originalUpdate = gameScene.update.bind(gameScene);
+        gameScene.update = function(deltaTime) {
+            originalUpdate(deltaTime);
+            updateStatus();
+        };
+
+        // Start game
+        engine.sceneManager.add('main', gameScene);
+        engine.sceneManager.load('main');
+        engine.start();
+
+        console.log('Platformer test started! Use A/D or Arrow Keys to move, Space or W to jump.');
+        console.log('Check the status display and browser console for debug information.');
+    </script>
+</body>
+</html>
