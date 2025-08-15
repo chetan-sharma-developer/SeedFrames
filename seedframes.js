@@ -1188,6 +1188,12 @@ class Rigidbody extends Component {
     // Apply drag
     this.velocity = this.velocity.multiplyByScalar(this.drag);
     
+    // Clamp velocity to prevent excessive speeds
+    const maxSpeed = 1000;
+    if (this.velocity.magnitude() > maxSpeed) {
+      this.velocity = this.velocity.normalize().multiplyByScalar(maxSpeed);
+    }
+    
     // Update position
     if (this.gameObject && this.gameObject.transform) {
       this.gameObject.transform.position = this.gameObject.transform.position.add(
@@ -1608,75 +1614,9 @@ class Player extends Component {
   }
 
   handlePlatformerInput(deltaTime) {
-    // console.log("Doing something", this.inputConfig);
-
-    let horizontalInput = 0;
-    if (this.inputManager.isKeyDown(this.inputConfig.left))
-      horizontalInput -= 1;
-    if (this.inputManager.isKeyDown(this.inputConfig.right))
-      horizontalInput += 1;
-
-    if (horizontalInput !== 0) {
-      this.velocity.x += horizontalInput * this.acceleration * deltaTime;
-      this.velocity.x = Math.max(
-        -this.maxSpeed,
-        Math.min(this.maxSpeed, this.velocity.x)
-      );
-      this.updateFacing(new Vector2(horizontalInput, 0));
-    } else {
-      const drag = this.isGrounded ? this.groundDrag : this.airDrag;
-      this.velocity.x *= drag;
-    }
-
-    if (this.inputManager.isKeyDown(this.inputConfig.jump)) {
-      this.lastJumpInputTime = 0;
-    }
-
-    if (
-      this.lastJumpInputTime < this.jumpBufferTime &&
-      (this.isGrounded || this.lastGroundedTime < this.coyoteTime)
-    ) {
-      this.jump();
-      this.lastJumpInputTime = this.jumpBufferTime;
-    }
-
-    // const wPressed = this.inputManager.isKeyPressed("KeyW");
-    // const spacePressed = this.inputManager.isKeyPressed("Space");
-    // const jumpPressed = this.inputManager.isKeyPressed(this.inputConfig.jump);
-
-    // console.log(
-    //   "Jump check - W:",
-    //   wPressed,
-    //   "Space:",
-    //   spacePressed,
-    //   "Jump config:",
-    //   jumpPressed
-    // );
-
-    // if (wPressed || spacePressed || jumpPressed) {
-    //   this.lastJumpInputTime = 0;
-    //   console.log("Jump input detected!");
-    // }
-
-    if (
-      this.inputManager.isKeyDown(this.inputConfig.jump) ||
-      this.inputManager.isKeyDown("Space")
-    ) {
-      this.lastJumpInputTime = 0;
-      console.log("Jump input detected");
-    }
-
-    // Jump conditions with better buffer and coyote time
-    const canJump =
-      (this.isGrounded || this.lastGroundedTime < this.coyoteTime) &&
-      this.lastJumpInputTime < this.jumpBufferTime &&
-      this.lastJumpInputTime >= 0;
-
-    if (canJump) {
-      this.jump();
-      this.lastJumpInputTime = this.jumpBufferTime + 0.1; // Prevent multiple jumps from same input
-      console.log("Jump executed!");
-    }
+    // This method is now handled by the AdvancedPlatformerPlayer class
+    // The base Player class should not handle platformer input when using Rigidbody
+    return;
   }
 
   handleRacingInput(deltaTime) {
@@ -1771,6 +1711,14 @@ class Player extends Component {
   }
 
   applyPhysics(deltaTime) {
+    // Check if this GameObject has a Rigidbody component
+    const rigidbody = this.gameObject.getComponent(Rigidbody);
+    if (rigidbody) {
+      // If using Rigidbody, don't apply physics here
+      return;
+    }
+    
+    // Only apply physics if no Rigidbody is present
     switch (this.movementType) {
       case "platformer":
         if (!this.isGrounded) {
@@ -1785,6 +1733,14 @@ class Player extends Component {
   }
 
   updatePosition(deltaTime) {
+    // Check if this GameObject has a Rigidbody component
+    const rigidbody = this.gameObject.getComponent(Rigidbody);
+    if (rigidbody) {
+      // If using Rigidbody, don't update position here
+      return;
+    }
+    
+    // Only update position if no Rigidbody is present
     const movement = this.velocity.multiplyByScalar(deltaTime);
     this.gameObject.transform.position =
       this.gameObject.transform.position.add(movement);
@@ -1959,6 +1915,9 @@ class Player extends Component {
     if (grounded && !wasGrounded) {
       this.lastGroundedTime = 0;
       if (this.onLanding) this.onLanding();
+    } else if (!grounded && wasGrounded) {
+      // Player just left the ground
+      this.lastGroundedTime = 0;
     }
   }
 
@@ -4281,8 +4240,7 @@ class PhysicsEngine {
     this.maxDepth = maxDepth;
   }
 
-  // Add this method to PhysicsEngine class
-  // Add or replace this method in PhysicsEngine class:
+  // Enhanced collision resolution for Player vs Platform interactions
   resolveCollision(objA, objB) {
     const colliderA = objA.getComponent(Collider);
     const colliderB = objB.getComponent(Collider);
@@ -4290,20 +4248,26 @@ class PhysicsEngine {
     // Skip if either is a trigger
     if (colliderA.isTrigger || colliderB.isTrigger) return;
 
-    // Only resolve Player vs Platform collisions
-    let player, platform;
+    // Handle Player vs Platform collisions specifically
+    let player, platform, playerCollider, platformCollider;
     if (colliderA.layer === "Player" && colliderB.layer === "Platform") {
       player = objA;
       platform = objB;
+      playerCollider = colliderA;
+      platformCollider = colliderB;
     } else if (colliderB.layer === "Player" && colliderA.layer === "Platform") {
       player = objB;
       platform = objA;
+      playerCollider = colliderB;
+      platformCollider = colliderA;
     } else {
-      return; // Not a player-platform collision
+      // For other collisions, use simple resolution
+      this.resolveSimpleCollision(objA, objB);
+      return;
     }
 
-    const playerBounds = player.getComponent(Collider).getBounds();
-    const platformBounds = platform.getComponent(Collider).getBounds();
+    const playerBounds = playerCollider.getBounds();
+    const platformBounds = platformCollider.getBounds();
 
     // Calculate overlap
     const overlapX = Math.min(
@@ -4316,23 +4280,76 @@ class PhysicsEngine {
     );
 
     // Only resolve if there's significant overlap
-    if (overlapX > 2 && overlapY > 2) {
+    if (overlapX > 1 && overlapY > 1) {
       if (overlapX < overlapY) {
-        // Horizontal collision
-        const moveX =
-          overlapX * (playerBounds.centerX < platformBounds.centerX ? -1 : 1);
-        player.transform.position.x += moveX * 0.5;
+        // Horizontal collision - push player away
+        const moveX = overlapX * (playerBounds.centerX < platformBounds.centerX ? -1 : 1);
+        player.transform.position.x += moveX;
+        
+        // Stop horizontal velocity
+        const rigidbody = player.getComponent(Rigidbody);
+        if (rigidbody) {
+          rigidbody.velocity.x = 0;
+        }
       } else {
-        // Vertical collision - push player up if coming from above
+        // Vertical collision
         if (playerBounds.centerY < platformBounds.centerY) {
-          player.transform.position.y =
-            platformBounds.top - playerBounds.height / 2;
+          // Player is above platform - land on it
+          player.transform.position.y = platformBounds.top - playerBounds.height / 2;
+          
+          // Stop downward velocity and set grounded
+          const rigidbody = player.getComponent(Rigidbody);
+          if (rigidbody && rigidbody.velocity.y > 0) {
+            rigidbody.velocity.y = 0;
+          }
+          
+          // Set player as grounded
           const playerComponent = player.getComponent(Player);
-          if (playerComponent && playerComponent.velocity.y > 0) {
-            playerComponent.velocity.y = 0;
+          if (playerComponent) {
+            playerComponent.setGrounded(true);
+          }
+        } else {
+          // Player is below platform - push down
+          const moveY = overlapY;
+          player.transform.position.y += moveY;
+          
+          // Stop upward velocity
+          const rigidbody = player.getComponent(Rigidbody);
+          if (rigidbody && rigidbody.velocity.y < 0) {
+            rigidbody.velocity.y = 0;
           }
         }
       }
+    }
+  }
+
+  // Simple collision resolution for non-player collisions
+  resolveSimpleCollision(objA, objB) {
+    const colliderA = objA.getComponent(Collider);
+    const colliderB = objB.getComponent(Collider);
+
+    if (colliderA.isTrigger || colliderB.isTrigger) return;
+
+    const boundsA = colliderA.getBounds();
+    const boundsB = colliderB.getBounds();
+
+    const overlapX = Math.min(
+      boundsA.right - boundsB.left,
+      boundsB.right - boundsA.left
+    );
+    const overlapY = Math.min(
+      boundsA.bottom - boundsB.top,
+      boundsB.bottom - boundsA.top
+    );
+
+    if (overlapX < overlapY) {
+      const moveX = (overlapX / 2) * (boundsA.centerX < boundsB.centerX ? -1 : 1);
+      objA.transform.position.x += moveX;
+      objB.transform.position.x -= moveX;
+    } else {
+      const moveY = (overlapY / 2) * (boundsA.centerY < boundsB.centerY ? -1 : 1);
+      objA.transform.position.y += moveY;
+      objB.transform.position.y -= moveY;
     }
   }
 
@@ -4353,36 +4370,7 @@ class PhysicsEngine {
     );
   }
 
-  resolveCollision(objA, objB) {
-    const colliderA = objA.getComponent(Collider);
-    const colliderB = objB.getComponent(Collider);
 
-    if (colliderA.isTrigger || colliderB.isTrigger) return;
-
-    const boundsA = colliderA.getBounds();
-    const boundsB = colliderB.getBounds();
-
-    const overlapX = Math.min(
-      boundsA.right - boundsB.left,
-      boundsB.right - boundsA.left
-    );
-    const overlapY = Math.min(
-      boundsA.bottom - boundsB.top,
-      boundsB.bottom - boundsA.top
-    );
-
-    if (overlapX < overlapY) {
-      const moveX =
-        (overlapX / 2) * (boundsA.centerX < boundsB.centerX ? -1 : 1);
-      objA.transform.position.x += moveX;
-      objB.transform.position.x -= moveX;
-    } else {
-      const moveY =
-        (overlapY / 2) * (boundsA.centerY < boundsB.centerY ? -1 : 1);
-      objA.transform.position.y += moveY;
-      objB.transform.position.y -= moveY;
-    }
-  }
 }
 
 class Renderer {

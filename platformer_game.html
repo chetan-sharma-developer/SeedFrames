@@ -289,16 +289,15 @@
                 this.invulnerabilityTime = 0;
                 this.animationState = 'idle';
                 this.facingDirection = 1;
+                
+                // Physics control flags
+                this.controlVelocity = true;
+                this.groundedCheckTimer = 0;
             }
 
             update(deltaTime) {
-                super.update(deltaTime);
-                
-                // Use the rigidbody's velocity as the source of truth
-                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
-                if (rigidbody) {
-                    this.velocity = rigidbody.velocity;
-                }
+                // Handle input and update player state
+                this.handleInput(deltaTime);
                 
                 // Handle invulnerability
                 if (this.invulnerable) {
@@ -318,13 +317,59 @@
                     this.dashCooldown -= deltaTime;
                 }
                 
+                // Update grounded state check timer
+                this.groundedCheckTimer += deltaTime;
+                if (this.groundedCheckTimer >= 0.05) { // Check every 50ms
+                    this.updateGroundedState();
+                    this.groundedCheckTimer = 0;
+                }
+                
+                // Update facing direction and animation
+                this.updateFacingDirection();
+                this.updateAnimationState();
+                
+                // Check boundaries
+                this.checkBoundaries();
+            }
+            
+            handleInput(deltaTime) {
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
+                
+                // Horizontal movement
+                let horizontalInput = 0;
+                if (engine.inputManager.isKeyDown('ArrowLeft') || engine.inputManager.isKeyDown('KeyA')) {
+                    horizontalInput -= 1;
+                }
+                if (engine.inputManager.isKeyDown('ArrowRight') || engine.inputManager.isKeyDown('KeyD')) {
+                    horizontalInput += 1;
+                }
+                
+                // Apply horizontal movement
+                if (horizontalInput !== 0) {
+                    const targetVelocityX = horizontalInput * this.speed;
+                    rigidbody.velocity.x = targetVelocityX;
+                } else {
+                    // Apply ground drag when no input
+                    const drag = this.isGrounded ? 0.8 : 0.95;
+                    rigidbody.velocity.x *= drag;
+                }
+                
+                // Jump input
+                if (engine.inputManager.isKeyDown('Space') || engine.inputManager.isKeyDown('ArrowUp') || engine.inputManager.isKeyDown('KeyW')) {
+                    this.lastJumpInputTime = 0;
+                }
+                
+                // Jump execution
+                if (this.lastJumpInputTime < this.jumpBufferTime && 
+                    (this.isGrounded || this.lastGroundedTime < this.coyoteTime)) {
+                    this.jump();
+                    this.lastJumpInputTime = this.jumpBufferTime + 0.1;
+                }
+                
                 // Double jump
                 if (engine.inputManager.isKeyPressed('KeyX') && this.doubleJumpAvailable && !this.isGrounded) {
-                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
-                    if (rigidbody) {
-                        rigidbody.velocity.y = -this.jumpForce * 0.8;
-                        this.velocity.y = rigidbody.velocity.y;
-                    }
+                    rigidbody.velocity.y = -this.jumpForce * 0.8;
                     this.doubleJumpAvailable = false;
                     createJumpParticles(this.gameObject.transform.position);
                     audioManager.play('jump');
@@ -332,43 +377,52 @@
                 
                 // Dash ability
                 if (engine.inputManager.isKeyPressed('KeyZ') && this.dashAvailable && this.dashCooldown <= 0) {
-                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
-                    if (rigidbody) {
-                        rigidbody.velocity.x = this.facingDirection * this.dashForce;
-                        this.velocity.x = rigidbody.velocity.x;
-                    }
+                    rigidbody.velocity.x = this.facingDirection * this.dashForce;
                     this.dashCooldown = 1.0;
                     createDashParticles(this.gameObject.transform.position);
                     audioManager.play('dash');
                 }
                 
+                // Update timers
+                this.lastGroundedTime += deltaTime;
+                this.lastJumpInputTime += deltaTime;
+                
                 // Reset double jump when grounded
                 if (this.isGrounded) {
                     this.doubleJumpAvailable = true;
                 }
+            }
+            
+            jump() {
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
                 
-                // Update facing direction
-                if (this.velocity.x > 0) this.facingDirection = 1;
-                else if (this.velocity.x < 0) this.facingDirection = -1;
+                rigidbody.velocity.y = -this.jumpForce;
+                this.isGrounded = false;
+                this.lastGroundedTime = this.coyoteTime + 0.1;
                 
-                // Update animation state
-                this.updateAnimationState();
+                if (this.onJump) this.onJump();
+            }
+            
+            updateFacingDirection() {
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
                 
-                // Check if still grounded (simple ground check)
-                this.updateGroundedState();
-                
-                // Check boundaries
-                this.checkBoundaries();
+                if (rigidbody.velocity.x > 10) this.facingDirection = 1;
+                else if (rigidbody.velocity.x < -10) this.facingDirection = -1;
             }
             
             updateAnimationState() {
                 const renderer = this.gameObject.getComponent(GameEngine.SpriteRenderer);
                 if (!renderer) return;
                 
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
+                
                 if (!this.isGrounded) {
                     this.animationState = 'jumping';
                     renderer.color = '#4a90e2';
-                } else if (Math.abs(this.velocity.x) > 10) {
+                } else if (Math.abs(rigidbody.velocity.x) > 10) {
                     this.animationState = 'running';
                     renderer.color = '#2ecc71';
                 } else {
@@ -378,29 +432,19 @@
             }
             
             updateGroundedState() {
-                // Simple grounded check - if we're not moving downward significantly, we might be grounded
-                // The engine's collision system will handle the actual collision resolution
-                if (this.velocity.y <= 5) { // Small threshold for floating point precision
-                    // We're not falling fast, check if we were recently grounded
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (!rigidbody) return;
+                
+                // Check if we're moving downward slowly (indicating we're on ground)
+                if (rigidbody.velocity.y >= -5 && rigidbody.velocity.y <= 5) {
+                    // We're not falling fast, might be grounded
                     if (this.lastGroundedTime < 0.1) {
                         this.isGrounded = true;
                     }
                 } else {
-                    // We're falling, definitely not grounded
+                    // We're falling or jumping, not grounded
                     this.isGrounded = false;
                 }
-            }
-            
-            // Override the base Player's updatePosition to let Rigidbody handle movement
-            updatePosition(deltaTime) {
-                // Don't move the player manually - let the Rigidbody handle physics
-                // The Rigidbody component will move the transform based on velocity and physics
-            }
-            
-            // Override the base Player's applyPhysics to let Rigidbody handle physics
-            applyPhysics(deltaTime) {
-                // Don't apply gravity manually - let the Rigidbody handle all physics
-                // The Rigidbody component will apply gravity, forces, and drag
             }
             
             checkBoundaries() {
@@ -414,7 +458,10 @@
                 // Keep player in horizontal bounds
                 if (pos.x < -50) {
                     this.gameObject.transform.position.x = -50;
-                    this.velocity.x = 0;
+                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                    if (rigidbody) {
+                        rigidbody.velocity.x = 0;
+                    }
                 }
             }
             
@@ -439,8 +486,7 @@
             respawnPlayer() {
                 this.gameObject.transform.position = new GameEngine.Vector2(gameState.playerStartX, gameState.playerStartY);
                 
-                // Reset both Player velocity and Rigidbody velocity
-                this.velocity = new GameEngine.Vector2(0, 0);
+                // Reset Rigidbody velocity
                 const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
                 if (rigidbody) {
                     rigidbody.velocity = new GameEngine.Vector2(0, 0);
@@ -448,6 +494,8 @@
                 
                 this.doubleJumpAvailable = true;
                 this.dashCooldown = 0;
+                this.isGrounded = false;
+                this.lastGroundedTime = 0;
             }
             
             onCollisionEnter(other) {
@@ -466,7 +514,6 @@
                         
                         // Stop downward velocity
                         rigidbody.velocity.y = 0;
-                        this.velocity.y = 0;
                         
                         if (this.onLanding) {
                             this.onLanding();
@@ -480,6 +527,35 @@
                 if (otherCollider && otherCollider.layer === 'Platform') {
                     // Mark as not grounded when leaving platform
                     this.isGrounded = false;
+                }
+            }
+        }
+
+        // Moving Platform Component
+        class MovingPlatform extends GameEngine.Component {
+            constructor(speed = 100, distance = 50, direction = 'horizontal') {
+                super();
+                this.speed = speed;
+                this.distance = distance;
+                this.direction = direction;
+                this.startPosition = null;
+                this.time = 0;
+            }
+            
+            start() {
+                this.startPosition = this.gameObject.transform.position.copy();
+            }
+            
+            update(deltaTime) {
+                if (!this.startPosition) return;
+                
+                this.time += deltaTime;
+                const t = (Math.sin(this.time * this.speed * 0.01) + 1) / 2; // 0 to 1
+                
+                if (this.direction === 'horizontal') {
+                    this.gameObject.transform.position.x = this.startPosition.x + t * this.distance;
+                } else if (this.direction === 'vertical') {
+                    this.gameObject.transform.position.y = this.startPosition.y + t * this.distance;
                 }
             }
         }
@@ -899,8 +975,11 @@
                 .withCollider('box', width, height, false, 'Platform')
                 .build();
             
-            // Make sure platforms are static (no Rigidbody needed)
-            // Platforms should NOT have Rigidbody components to remain static
+            // Ensure platform doesn't have a Rigidbody (should be static)
+            const rigidbody = platform.getComponent(GameEngine.Rigidbody);
+            if (rigidbody) {
+                platform.removeComponent(rigidbody);
+            }
             
             platforms.push(platform);
             return platform;
@@ -913,8 +992,12 @@
                 .withCollider('box', width, height, false, 'Platform')
                 .build();
             
-            // Moving platforms use script-based movement, not physics
-            // They should NOT have Rigidbody components
+            // Ensure moving platform doesn't have a Rigidbody (should be kinematic)
+            const rigidbody = platform.getComponent(GameEngine.Rigidbody);
+            if (rigidbody) {
+                platform.removeComponent(rigidbody);
+            }
+            
             platform.addComponent(new MovingPlatform(150, 80, direction));
             platforms.push(platform);
             return platform;
@@ -979,6 +1062,165 @@
             return hazard;
         }
 
+        // ==================== COLLECTIBLE COMPONENT ====================
+        
+        class Collectible extends GameEngine.Component {
+            constructor(value = 50, type = 'coin') {
+                super();
+                this.value = value;
+                this.type = type;
+                this.collected = false;
+                this.bobTime = 0;
+                this.startY = 0;
+            }
+            
+            start() {
+                this.startY = this.gameObject.transform.position.y;
+            }
+            
+            update(deltaTime) {
+                if (this.collected) return;
+                
+                // Bobbing animation
+                this.bobTime += deltaTime;
+                const bobOffset = Math.sin(this.bobTime * 3) * 3;
+                this.gameObject.transform.position.y = this.startY + bobOffset;
+            }
+            
+            onCollisionEnter(other) {
+                if (this.collected) return;
+                
+                const playerComponent = other.getComponent(AdvancedPlatformerPlayer);
+                if (playerComponent) {
+                    this.collected = true;
+                    gameState.score += this.value;
+                    updateUI();
+                    
+                    // Create collection effect
+                    createCollectEffect(this.gameObject.transform.position, this.type);
+                    
+                    // Play sound
+                    audioManager.play('collect');
+                    
+                    // Destroy the collectible
+                    if (this.gameObject && this.gameObject.destroy) {
+                        this.gameObject.destroy();
+                    }
+                    
+                    // Check if level is complete
+                    checkLevelComplete();
+                }
+            }
+        }
+        
+        function createCollectEffect(position, type) {
+            const color = type === 'gem' ? '#ff00ff' : '#ffff00';
+            for (let i = 0; i < 6; i++) {
+                const particle = gameScene.createGameObject(`CollectParticle_${Date.now()}_${i}`)
+                    .at(position.x, position.y)
+                    .withColor(color, 2, 2)
+                    .build();
+                
+                const rigidbody = particle.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    const angle = (i / 6) * Math.PI * 2;
+                    rigidbody.velocity = new GameEngine.Vector2(
+                        Math.cos(angle) * 100,
+                        Math.sin(angle) * 100
+                    );
+                }
+                
+                // Auto-destroy after 0.8 seconds
+                setTimeout(() => {
+                    if (particle && particle.destroy) {
+                        particle.destroy();
+                    }
+                }, 800);
+                
+                particles.push(particle);
+            }
+        }
+
+        // ==================== PARTICLE SYSTEM ====================
+        
+        function createJumpParticles(position) {
+            for (let i = 0; i < 5; i++) {
+                const particle = gameScene.createGameObject(`Particle_${Date.now()}_${i}`)
+                    .at(position.x + (Math.random() - 0.5) * 20, position.y + 10)
+                    .withColor('#ffffff', 3, 3)
+                    .build();
+                
+                const rigidbody = particle.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    rigidbody.velocity = new GameEngine.Vector2(
+                        (Math.random() - 0.5) * 100,
+                        -Math.random() * 200
+                    );
+                }
+                
+                // Auto-destroy after 1 second
+                setTimeout(() => {
+                    if (particle && particle.destroy) {
+                        particle.destroy();
+                    }
+                }, 1000);
+                
+                particles.push(particle);
+            }
+        }
+        
+        function createDashParticles(position) {
+            for (let i = 0; i < 8; i++) {
+                const particle = gameScene.createGameObject(`DashParticle_${Date.now()}_${i}`)
+                    .at(position.x + (Math.random() - 0.5) * 30, position.y + (Math.random() - 0.5) * 20)
+                    .withColor('#00ffff', 2, 2)
+                    .build();
+                
+                const rigidbody = particle.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    rigidbody.velocity = new GameEngine.Vector2(
+                        (Math.random() - 0.5) * 150,
+                        (Math.random() - 0.5) * 150
+                    );
+                }
+                
+                // Auto-destroy after 0.5 seconds
+                setTimeout(() => {
+                    if (particle && particle.destroy) {
+                        particle.destroy();
+                    }
+                }, 500);
+                
+                particles.push(particle);
+            }
+        }
+        
+        function createExplosionParticles(position) {
+            for (let i = 0; i < 10; i++) {
+                const particle = gameScene.createGameObject(`ExplosionParticle_${Date.now()}_${i}`)
+                    .at(position.x + (Math.random() - 0.5) * 40, position.y + (Math.random() - 0.5) * 40)
+                    .withColor('#ff4444', 4, 4)
+                    .build();
+                
+                const rigidbody = particle.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    rigidbody.velocity = new GameEngine.Vector2(
+                        (Math.random() - 0.5) * 300,
+                        (Math.random() - 0.5) * 300
+                    );
+                }
+                
+                // Auto-destroy after 1.5 seconds
+                setTimeout(() => {
+                    if (particle && particle.destroy) {
+                        particle.destroy();
+                    }
+                }, 1500);
+                
+                particles.push(particle);
+            }
+        }
+
         // ==================== GAME LOGIC ====================
         
         function createPlayer() {
@@ -988,6 +1230,13 @@
                 .withCollider('box', 24, 32, false, 'Player')
                 .withDynamicBody(1.0, 1.0)
                 .build();
+            
+            // Configure the Rigidbody for better platformer physics
+            const rigidbody = player.getComponent(GameEngine.Rigidbody);
+            if (rigidbody) {
+                rigidbody.drag = 0.98; // Slightly more responsive
+                rigidbody.gravity = new GameEngine.Vector2(0, 1200); // Stronger gravity for snappier feel
+            }
             
             player.addComponent(new AdvancedPlatformerPlayer({
                 speed: 250,
