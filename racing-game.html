@@ -113,6 +113,15 @@
             </div>
         </div>
         
+        <div class="game-info" style="margin-top: 20px;">
+            <div class="controls">
+                <strong>Racing Controls:</strong><br>
+                <strong>W/↑</strong> Accelerate | <strong>S/↓</strong> Brake<br>
+                <strong>A/←</strong> Turn Left | <strong>D/→</strong> Turn Right<br>
+                <strong>R</strong> Reset Position
+            </div>
+        </div>
+        
         <div class="controls">
             <strong>Controls:</strong><br>
             <strong>WASD</strong> or <strong>Arrow Keys</strong> to drive<br>
@@ -301,10 +310,12 @@
             
             // Add racing components
             const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-            racingComponent.onDrift = (driftIntensity) => {
-                gameState.driftScore += Math.floor(driftIntensity * 10);
-                updateUI();
-            };
+            if (racingComponent && typeof racingComponent.onDrift !== 'undefined') {
+                racingComponent.onDrift = (driftIntensity) => {
+                    gameState.driftScore += Math.floor(driftIntensity * 10);
+                    updateUI();
+                };
+            }
             
             // Create AI cars
             for (let i = 0; i < track.aiCars; i++) {
@@ -358,9 +369,11 @@
             // Update speed
             if (player) {
                 const racingComponent = player.getComponent(GameEngine.RacingPlayer);
-                if (racingComponent) {
+                if (racingComponent && typeof racingComponent.getSpeed === 'function') {
                     const speed = Math.round(racingComponent.getSpeed() * 3.6); // Convert to km/h
                     document.getElementById('speed').textContent = speed;
+                } else {
+                    document.getElementById('speed').textContent = '0';
                 }
             }
             
@@ -472,14 +485,10 @@
                     const normalizedDirection = direction.normalize();
                     const targetSpeed = Math.min(this.speed, this.maxSpeed);
                     
-                    // Calculate acceleration
-                    const currentVelocity = this.gameObject.getComponent(GameEngine.Rigidbody)?.velocity || new GameEngine.Vector2(0, 0);
-                    const acceleration = normalizedDirection.multiplyByScalar(this.acceleration * deltaTime);
-                    
-                    // Apply acceleration
-                    if (this.gameObject.getComponent(GameEngine.Rigidbody)) {
-                        this.gameObject.getComponent(GameEngine.Rigidbody).velocity = currentVelocity.add(acceleration);
-                    }
+                    // Simple movement without Rigidbody
+                    const moveSpeed = targetSpeed * deltaTime;
+                    this.gameObject.transform.position.x += normalizedDirection.x * moveSpeed;
+                    this.gameObject.transform.position.y += normalizedDirection.y * moveSpeed;
                     
                     // Rotate towards target
                     const targetAngle = Math.atan2(normalizedDirection.y, normalizedDirection.x);
@@ -502,7 +511,26 @@
         document.addEventListener('keydown', (e) => {
             if (!player) return;
             
+            const racingComponent = player.getComponent(GameEngine.RacingPlayer);
+            if (!racingComponent) return;
+            
             switch(e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    racingComponent.accelerate(1.0);
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    racingComponent.brake(1.0);
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    racingComponent.steer(-1.0);
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    racingComponent.steer(1.0);
+                    break;
                 case 'KeyR':
                     // Reset car position
                     const track = tracks[gameState.currentTrack - 1];
@@ -510,10 +538,33 @@
                     player.transform.position.y = track.startPosition.y;
                     player.transform.rotation = 0;
                     
-                    const rigidbody = player.getComponent(GameEngine.Rigidbody);
-                    if (rigidbody) {
-                        rigidbody.velocity = new GameEngine.Vector2(0, 0);
+                    // Reset racing component if available
+                    if (typeof racingComponent.setVelocity === 'function') {
+                        racingComponent.setVelocity(new GameEngine.Vector2(0, 0));
                     }
+                    break;
+            }
+        });
+        
+        // Handle key release
+        document.addEventListener('keyup', (e) => {
+            if (!player) return;
+            
+            const racingComponent = player.getComponent(GameEngine.RacingPlayer);
+            if (!racingComponent) return;
+            
+            switch(e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                case 'KeyS':
+                case 'ArrowDown':
+                    racingComponent.targetSpeed = 0;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                case 'KeyD':
+                case 'ArrowRight':
+                    racingComponent.steeringAngle = 0;
                     break;
             }
         });
@@ -521,6 +572,23 @@
         // Game loop for timer updates
         function gameLoop() {
             updateLapTimer();
+            
+            // Update racing components
+            if (player) {
+                const racingComponent = player.getComponent(GameEngine.RacingPlayer);
+                if (racingComponent && typeof racingComponent.update === 'function') {
+                    racingComponent.update(0.016); // Assuming 60 FPS
+                }
+            }
+            
+            // Update AI cars
+            aiCars.forEach(aiCar => {
+                const aiComponent = aiCar.getComponent(AIDrivingComponent);
+                if (aiComponent && typeof aiComponent.update === 'function') {
+                    aiComponent.update(0.016);
+                }
+            });
+            
             requestAnimationFrame(gameLoop);
         }
         

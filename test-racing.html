@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Racing Player Test - SeedFrames</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4a90e2;
+        }
+        .success { border-left-color: #27ae60; }
+        .error { border-left-color: #e74c3c; }
+        .warning { border-left-color: #f39c12; }
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #357abd;
+        }
+        #game-container {
+            border: 2px solid #ccc;
+            margin: 20px 0;
+            background: #000;
+        }
+        .info {
+            background: #e8f4fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏎️ Racing Player Test</h1>
+    
+    <div class="test-section">
+        <h3>RacingPlayer Class Test</h3>
+        <button onclick="testRacingPlayer()">Test RacingPlayer</button>
+        <div id="racing-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Engine Test</h3>
+        <button onclick="testEngine()">Test Engine</button>
+        <div id="engine-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Game Object Test</h3>
+        <button onclick="testGameObject()">Test GameObject with RacingPlayer</button>
+        <div id="gameobject-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Input Test</h3>
+        <div class="info">
+            <strong>Use WASD or Arrow Keys to control the car</strong><br>
+            W/↑: Accelerate | S/↓: Brake | A/←: Turn Left | D/→: Turn Right
+        </div>
+        <div id="input-result"></div>
+    </div>
+    
+    <div id="game-container"></div>
+    
+    <script src="./src/seedframes.js"></script>
+    <script>
+        let engine = null;
+        let scene = null;
+        let player = null;
+        let racingComponent = null;
+        
+        function logResult(elementId, message, type = 'success') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+        
+        function testRacingPlayer() {
+            try {
+                if (typeof GameEngine === 'undefined') {
+                    throw new Error('GameEngine not loaded');
+                }
+                
+                if (typeof GameEngine.RacingPlayer === 'undefined') {
+                    throw new Error('RacingPlayer class not available');
+                }
+                
+                // Test creating a RacingPlayer instance
+                const testPlayer = new GameEngine.RacingPlayer({
+                    speed: 200,
+                    maxSpeed: 400,
+                    acceleration: 500
+                });
+                
+                // Test methods
+                const speed = testPlayer.getSpeed();
+                const speedKmh = testPlayer.getSpeedKmh();
+                
+                logResult('racing-result', 
+                    `✅ RacingPlayer created successfully!<br>
+                     Speed: ${speed} m/s<br>
+                     Speed: ${speedKmh} km/h<br>
+                     Methods available: getSpeed, getSpeedKmh, accelerate, brake, steer`, 
+                    'success');
+                
+                console.log('RacingPlayer test:', testPlayer);
+                
+            } catch (error) {
+                logResult('racing-result', `❌ Error: ${error.message}`, 'error');
+                console.error('RacingPlayer test error:', error);
+            }
+        }
+        
+        function testEngine() {
+            try {
+                if (!GameEngine.SeedFrames) {
+                    throw new Error('SeedFrames class not available');
+                }
+                
+                engine = new GameEngine.SeedFrames({
+                    width: 800,
+                    height: 600,
+                    containerId: 'game-container',
+                    backgroundColor: '#2c3e50',
+                    debug: false
+                });
+                
+                scene = engine.createScene('TestScene');
+                engine.sceneManager.add('test', scene);
+                
+                logResult('engine-result', '✅ Engine initialized successfully!', 'success');
+                console.log('Engine:', engine);
+                
+            } catch (error) {
+                logResult('engine-result', `❌ Error: ${error.message}`, 'error');
+                console.error('Engine test error:', error);
+            }
+        }
+        
+        function testGameObject() {
+            try {
+                if (!scene) {
+                    throw new Error('Scene not created');
+                }
+                
+                player = scene.createGameObject('TestCar')
+                    .at(400, 300)
+                    .withColor('#e74c3c', 40, 20)
+                    .withCollider('box', 40, 20, false, 'Player')
+                    .withRacingPlayer({
+                        speed: 200,
+                        maxSpeed: 400,
+                        acceleration: 500,
+                        onDrift: (intensity) => console.log('Drift!', intensity)
+                    })
+                    .build();
+                
+                racingComponent = player.getComponent(GameEngine.RacingPlayer);
+                
+                if (racingComponent) {
+                    logResult('gameobject-result', 
+                        `✅ GameObject with RacingPlayer created!<br>
+                         Component: ${racingComponent.constructor.name}<br>
+                         Speed: ${racingComponent.getSpeed()} m/s`, 
+                        'success');
+                    
+                    // Start the engine
+                    engine.start();
+                    
+                    // Start input handling
+                    setupInputHandling();
+                    
+                } else {
+                    throw new Error('RacingPlayer component not found');
+                }
+                
+            } catch (error) {
+                logResult('gameobject-result', `❌ Error: ${error.message}`, 'error');
+                console.error('GameObject test error:', error);
+            }
+        }
+        
+        function setupInputHandling() {
+            document.addEventListener('keydown', (e) => {
+                if (!racingComponent) return;
+                
+                switch(e.code) {
+                    case 'KeyW':
+                    case 'ArrowUp':
+                        racingComponent.accelerate(1.0);
+                        updateInputDisplay('Accelerating');
+                        break;
+                    case 'KeyS':
+                    case 'ArrowDown':
+                        racingComponent.brake(1.0);
+                        updateInputDisplay('Braking');
+                        break;
+                    case 'KeyA':
+                    case 'ArrowLeft':
+                        racingComponent.steer(-1.0);
+                        updateInputDisplay('Turning Left');
+                        break;
+                    case 'KeyD':
+                    case 'ArrowRight':
+                        racingComponent.steer(1.0);
+                        updateInputDisplay('Turning Right');
+                        break;
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                if (!racingComponent) return;
+                
+                switch(e.code) {
+                    case 'KeyW':
+                    case 'ArrowUp':
+                    case 'KeyS':
+                    case 'ArrowDown':
+                        racingComponent.targetSpeed = 0;
+                        updateInputDisplay('No input');
+                        break;
+                    case 'KeyA':
+                    case 'ArrowLeft':
+                    case 'KeyD':
+                    case 'ArrowRight':
+                        racingComponent.steeringAngle = 0;
+                        updateInputDisplay('No input');
+                        break;
+                }
+            });
+            
+            // Start update loop
+            setInterval(() => {
+                if (racingComponent && typeof racingComponent.update === 'function') {
+                    racingComponent.update(0.016);
+                    updateInputDisplay(`Speed: ${Math.round(racingComponent.getSpeedKmh())} km/h`);
+                }
+            }, 16);
+        }
+        
+        function updateInputDisplay(message) {
+            const element = document.getElementById('input-result');
+            if (element) {
+                element.innerHTML = `<div class="info">${message}</div>`;
+            }
+        }
+        
+        // Auto-run tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testRacingPlayer();
+            }, 100);
+        });
+    </script>
+</body>
+</html>

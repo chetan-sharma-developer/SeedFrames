@@ -1121,6 +1121,8 @@ class Rigidbody extends Component {
 
   setVelocity(velocity) {
     this.velocity = velocity;
+    this.currentSpeed = velocity.magnitude();
+    this.targetSpeed = this.currentSpeed;
   }
 
   update(deltaTime) {
@@ -1953,6 +1955,94 @@ class RacingPlayer extends Player {
       friction: 0.95,
       ...config,
     });
+    
+    // Racing-specific properties
+    this.currentSpeed = 0;
+    this.targetSpeed = 0;
+    this.steeringAngle = 0;
+    this.driftFactor = 0.8;
+    this.boostMultiplier = 1.0;
+    this.isDrifting = false;
+    this.driftIntensity = 0;
+    
+    // Callbacks
+    this.onDrift = config.onDrift || null;
+  }
+
+  getSpeed() {
+    return this.currentSpeed;
+  }
+
+  getSpeedKmh() {
+    return this.currentSpeed * 3.6; // Convert m/s to km/h
+  }
+
+  accelerate(amount = 1.0) {
+    this.targetSpeed = Math.min(this.maxSpeed, this.targetSpeed + this.acceleration * amount);
+  }
+
+  brake(amount = 1.0) {
+    this.targetSpeed = Math.max(0, this.targetSpeed - this.acceleration * amount);
+  }
+
+  steer(direction) {
+    this.steeringAngle += direction * this.steeringSpeed * 0.016; // Assuming 60 FPS
+    this.steeringAngle = Math.max(-Math.PI/4, Math.min(Math.PI/4, this.steeringAngle));
+  }
+
+  startDrift() {
+    this.isDrifting = true;
+    this.driftIntensity = 0;
+  }
+
+  stopDrift() {
+    this.isDrifting = false;
+    this.driftIntensity = 0;
+  }
+
+  update(deltaTime) {
+    super.update(deltaTime);
+    
+    // Update speed
+    if (this.targetSpeed > this.currentSpeed) {
+      this.currentSpeed = Math.min(this.targetSpeed, this.currentSpeed + this.acceleration * deltaTime);
+    } else if (this.targetSpeed < this.currentSpeed) {
+      this.currentSpeed = Math.max(this.targetSpeed, this.currentSpeed - this.acceleration * deltaTime);
+    }
+    
+    // Apply friction
+    this.currentSpeed *= this.friction;
+    
+    // Apply boost
+    this.currentSpeed *= this.boostMultiplier;
+    
+    // Update drift
+    if (this.isDrifting) {
+      this.driftIntensity += deltaTime;
+      if (this.onDrift) {
+        this.onDrift(this.driftIntensity);
+      }
+    }
+    
+    // Update position based on speed and steering
+    if (this.gameObject && this.gameObject.transform) {
+      const direction = new Vector2(
+        Math.cos(this.gameObject.transform.rotation + this.steeringAngle),
+        Math.sin(this.gameObject.transform.rotation + this.steeringAngle)
+      );
+      
+      this.gameObject.transform.position.x += direction.x * this.currentSpeed * deltaTime;
+      this.gameObject.transform.position.y += direction.y * this.currentSpeed * deltaTime;
+    }
+  }
+
+  setBoost(multiplier, duration = 0) {
+    this.boostMultiplier = multiplier;
+    if (duration > 0) {
+      setTimeout(() => {
+        this.boostMultiplier = 1.0;
+      }, duration * 1000);
+    }
   }
 }
 
