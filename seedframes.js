@@ -1154,17 +1154,25 @@ class Rigidbody extends Component {
   }
 
   addForce(force) {
+    // Static bodies cannot have forces applied to them
+    if (this.bodyType === 'static' || this.mass === Infinity) return;
     this.force = this.force.add(force);
   }
 
   setVelocity(velocity) {
+    // Static bodies cannot have velocity changed
+    if (this.bodyType === 'static') return;
     this.velocity = velocity;
     this.currentSpeed = velocity.magnitude();
     this.targetSpeed = this.currentSpeed;
   }
 
   update(deltaTime) {
-    if (this.isKinematic) return;
+    // Static and kinematic bodies don't update via physics
+    if (this.isKinematic || this.bodyType === 'static') return;
+
+    // Prevent infinite mass objects from moving
+    if (this.mass === Infinity || this.mass <= 0) return;
 
     // Apply forces
     this.acceleration = this.force.multiplyByScalar(1 / this.mass);

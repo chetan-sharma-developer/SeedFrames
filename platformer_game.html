@@ -294,10 +294,10 @@
             update(deltaTime) {
                 super.update(deltaTime);
                 
-                // Sync velocity with rigidbody
+                // Use the rigidbody's velocity as the source of truth
                 const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
                 if (rigidbody) {
-                    rigidbody.velocity = this.velocity;
+                    this.velocity = rigidbody.velocity;
                 }
                 
                 // Handle invulnerability
@@ -320,7 +320,11 @@
                 
                 // Double jump
                 if (engine.inputManager.isKeyPressed('KeyX') && this.doubleJumpAvailable && !this.isGrounded) {
-                    this.velocity.y = -this.jumpForce * 0.8;
+                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                    if (rigidbody) {
+                        rigidbody.velocity.y = -this.jumpForce * 0.8;
+                        this.velocity.y = rigidbody.velocity.y;
+                    }
                     this.doubleJumpAvailable = false;
                     createJumpParticles(this.gameObject.transform.position);
                     audioManager.play('jump');
@@ -328,7 +332,11 @@
                 
                 // Dash ability
                 if (engine.inputManager.isKeyPressed('KeyZ') && this.dashAvailable && this.dashCooldown <= 0) {
-                    this.velocity.x = this.facingDirection * this.dashForce;
+                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                    if (rigidbody) {
+                        rigidbody.velocity.x = this.facingDirection * this.dashForce;
+                        this.velocity.x = rigidbody.velocity.x;
+                    }
                     this.dashCooldown = 1.0;
                     createDashParticles(this.gameObject.transform.position);
                     audioManager.play('dash');
@@ -346,8 +354,8 @@
                 // Update animation state
                 this.updateAnimationState();
                 
-                // Check if still grounded
-                this.checkGroundCollision();
+                // Check if still grounded (simple ground check)
+                this.updateGroundedState();
                 
                 // Check boundaries
                 this.checkBoundaries();
@@ -369,78 +377,30 @@
                 }
             }
             
-            checkGroundCollision() {
-                // Check if player is currently colliding with any platform
-                const playerCollider = this.gameObject.getComponent(GameEngine.Collider);
-                if (!playerCollider) return;
-                
-                let foundGround = false;
-                let closestPlatform = null;
-                let closestDistance = Infinity;
-                
-                // Check collision with all platforms
-                platforms.forEach(platform => {
-                    if (!platform) return;
-                    
-                    const platformCollider = platform.getComponent(GameEngine.Collider);
-                    if (!platformCollider) return;
-                    
-                    const playerPos = this.gameObject.transform.position;
-                    const platformPos = platform.transform.position;
-                    
-                    // Calculate collision bounds
-                    const playerBottom = playerPos.y + (playerCollider.height / 2);
-                    const playerTop = playerPos.y - (playerCollider.height / 2);
-                    const platformTop = platformPos.y - (platformCollider.height / 2);
-                    const platformBottom = platformPos.y + (platformCollider.height / 2);
-                    const platformLeft = platformPos.x - (platformCollider.width / 2);
-                    const platformRight = platformPos.x + (platformCollider.width / 2);
-                    const playerLeft = playerPos.x - (playerCollider.width / 2);
-                    const playerRight = playerPos.x + (playerCollider.width / 2);
-                    
-                    // Check for AABB collision
-                    const horizontalOverlap = playerRight > platformLeft && playerLeft < platformRight;
-                    const verticalOverlap = playerBottom > platformTop && playerTop < platformBottom;
-                    
-                    if (horizontalOverlap && verticalOverlap) {
-                        // Determine collision resolution based on approach direction
-                        const overlapLeft = playerRight - platformLeft;
-                        const overlapRight = platformRight - playerLeft;
-                        const overlapTop = playerBottom - platformTop;
-                        const overlapBottom = platformBottom - playerTop;
-                        
-                        // Find minimum overlap (this determines resolution direction)
-                        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-                        
-                        // Only resolve collision from above (landing on platform)
-                        if (minOverlap === overlapTop && this.velocity.y >= 0) {
-                            const distance = Math.abs(playerBottom - platformTop);
-                            if (distance < closestDistance) {
-                                closestDistance = distance;
-                                closestPlatform = platform;
-                            }
-                        }
+            updateGroundedState() {
+                // Simple grounded check - if we're not moving downward significantly, we might be grounded
+                // The engine's collision system will handle the actual collision resolution
+                if (this.velocity.y <= 5) { // Small threshold for floating point precision
+                    // We're not falling fast, check if we were recently grounded
+                    if (this.lastGroundedTime < 0.1) {
+                        this.isGrounded = true;
                     }
-                });
-                
-                // Apply collision resolution for closest platform
-                if (closestPlatform) {
-                    const platformCollider = closestPlatform.getComponent(GameEngine.Collider);
-                    const platformPos = closestPlatform.transform.position;
-                    const platformTop = platformPos.y - (platformCollider.height / 2);
-                    
-                    // Snap player to platform top
-                    this.gameObject.transform.position.y = platformTop - (playerCollider.height / 2);
-                    this.velocity.y = 0;
-                    this.isGrounded = true;
-                    this.lastGroundedTime = 0;
-                    foundGround = true;
-                }
-                
-                // If no ground found and player was grounded, mark as not grounded
-                if (!foundGround && this.velocity.y > 0) {
+                } else {
+                    // We're falling, definitely not grounded
                     this.isGrounded = false;
                 }
+            }
+            
+            // Override the base Player's updatePosition to let Rigidbody handle movement
+            updatePosition(deltaTime) {
+                // Don't move the player manually - let the Rigidbody handle physics
+                // The Rigidbody component will move the transform based on velocity and physics
+            }
+            
+            // Override the base Player's applyPhysics to let Rigidbody handle physics
+            applyPhysics(deltaTime) {
+                // Don't apply gravity manually - let the Rigidbody handle all physics
+                // The Rigidbody component will apply gravity, forces, and drag
             }
             
             checkBoundaries() {
@@ -478,7 +438,14 @@
             
             respawnPlayer() {
                 this.gameObject.transform.position = new GameEngine.Vector2(gameState.playerStartX, gameState.playerStartY);
+                
+                // Reset both Player velocity and Rigidbody velocity
                 this.velocity = new GameEngine.Vector2(0, 0);
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    rigidbody.velocity = new GameEngine.Vector2(0, 0);
+                }
+                
                 this.doubleJumpAvailable = true;
                 this.dashCooldown = 0;
             }
@@ -489,20 +456,17 @@
                 
                 // Check collision with platforms
                 if (otherCollider.layer === 'Platform') {
-                    const playerPos = this.gameObject.transform.position;
-                    const platformPos = other.transform.position;
-                    const playerCollider = this.gameObject.getComponent(GameEngine.Collider);
+                    const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                    if (!rigidbody) return;
                     
-                    // Check if player is above the platform (landing on top)
-                    const playerBottom = playerPos.y + (playerCollider.height / 2);
-                    const platformTop = platformPos.y - (otherCollider.height / 2);
-                    
-                    if (this.velocity.y > 0 && playerBottom >= platformTop && playerBottom <= platformTop + 10) {
-                        // Player is landing on top of platform
-                        this.velocity.y = 0;
+                    // If we're moving downward and hit a platform, we've landed
+                    if (rigidbody.velocity.y >= 0) {
                         this.isGrounded = true;
                         this.lastGroundedTime = 0;
-                        this.gameObject.transform.position.y = platformTop - (playerCollider.height / 2);
+                        
+                        // Stop downward velocity
+                        rigidbody.velocity.y = 0;
+                        this.velocity.y = 0;
                         
                         if (this.onLanding) {
                             this.onLanding();
@@ -514,12 +478,8 @@
             onCollisionExit(other) {
                 const otherCollider = other.getComponent(GameEngine.Collider);
                 if (otherCollider && otherCollider.layer === 'Platform') {
-                    // Small delay before marking as not grounded to allow for platform edges
-                    setTimeout(() => {
-                        if (this.velocity.y > 10) { // Only if falling
-                            this.isGrounded = false;
-                        }
-                    }, 50);
+                    // Mark as not grounded when leaving platform
+                    this.isGrounded = false;
                 }
             }
         }
