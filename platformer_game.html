@@ -631,14 +631,8 @@
             }
             
             jump() {
-                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
-                if (!rigidbody) return;
-                
-                rigidbody.velocity.y = -this.jumpForce;
-                this.isGrounded = false;
-                this.lastGroundedTime = this.coyoteTime + 0.1;
-                
-                if (this.onJump) this.onJump();
+                // Call parent jump method for proper jump logic
+                super.jump();
             }
             
             updateFacingDirection() {
@@ -664,21 +658,7 @@
                 }
             }
             
-            updateGroundedState() {
-                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
-                if (!rigidbody) return;
-                
-                // Check if we're moving downward slowly (indicating we're on ground)
-                if (rigidbody.velocity.y >= -5 && rigidbody.velocity.y <= 5) {
-                    // We're not falling fast, might be grounded
-                    if (this.lastGroundedTime < 0.1) {
-                        this.isGrounded = true;
-                    }
-                } else {
-                    // We're falling or jumping, not grounded
-                    this.isGrounded = false;
-                }
-            }
+
             
             checkBoundaries() {
                 const pos = this.gameObject.transform.position;

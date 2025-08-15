@@ -1899,8 +1899,11 @@ class Player extends Component {
   jump() {
     if (this.movementType !== "platformer" || !this.rigidbody) return;
 
-    // Use coyote time and jump buffering checks here
-    if (this.lastGroundedTime < this.coyoteTime || this.lastJumpInputTime < this.jumpBufferTime) {
+    // Check if player can jump (grounded within coyote time OR has jump buffer)
+    const canJump = (this.isGrounded || this.lastGroundedTime < this.coyoteTime) && 
+                   this.lastJumpInputTime < this.jumpBufferTime;
+    
+    if (canJump) {
       const currentVelocity = this.rigidbody.velocity;
       const jumpVelocity = new Vector2(currentVelocity.x, -this.jumpForce);
       this.rigidbody.setVelocity(jumpVelocity); // Set vertical velocity on the rigidbody
@@ -2005,14 +2008,17 @@ class Player extends Component {
       const playerBounds = playerCollider.getBounds();
       const platformBounds = otherCollider.getBounds();
       
-      // Check if player is above the platform
-      if (playerBounds.centerY < platformBounds.centerY) {
+      // Check if player is above the platform and moving downward
+      if (playerBounds.centerY < platformBounds.centerY && this.rigidbody && this.rigidbody.velocity.y > 0) {
+        // Land on platform
         this.setGrounded(true);
         
+        // Position player exactly on top of platform
+        const playerHeight = playerBounds.height;
+        this.gameObject.transform.position.y = platformBounds.top - playerHeight / 2;
+        
         // Stop downward velocity
-        if (this.rigidbody && this.rigidbody.velocity.y > 0) {
-          this.rigidbody.setVelocity(new Vector2(this.rigidbody.velocity.x, 0));
-        }
+        this.rigidbody.setVelocity(new Vector2(this.rigidbody.velocity.x, 0));
       }
     }
   }
@@ -2022,6 +2028,13 @@ class Player extends Component {
     if (otherCollider && otherCollider.layer === 'Platform') {
       // Mark as not grounded when leaving platform
       this.setGrounded(false);
+      
+      // Add a small delay before allowing jumping again to prevent edge cases
+      setTimeout(() => {
+        if (!this.isGrounded) {
+          this.lastGroundedTime = 0;
+        }
+      }, 50);
     }
   }
 
@@ -4481,35 +4494,41 @@ class PhysicsEngine {
       boundsB.bottom - boundsA.top
     );
 
-    // For platform collisions, only move the non-platform object
+    // Only resolve if there's significant overlap
+    if (overlapX < 1 || overlapY < 1) return;
+
+    // For platform collisions, handle differently
     const isPlatformCollision = colliderA.layer === 'Platform' || colliderB.layer === 'Platform';
     
-    if (overlapX < overlapY) {
-      const moveX = overlapX * (boundsA.centerX < boundsB.centerX ? -1 : 1);
-      if (isPlatformCollision) {
-        // Only move the non-platform object
+    if (isPlatformCollision) {
+      // For platform collisions, let the Player component handle everything
+      // Only do very minimal separation to prevent deep penetration
+      if (overlapX < overlapY && overlapX > 5) {
+        // Horizontal collision - very minimal separation only for deep penetration
+        const moveX = Math.min(overlapX - 5, 1) * (boundsA.centerX < boundsB.centerX ? -1 : 1);
         if (colliderA.layer === 'Platform') {
           objB.transform.position.x += moveX;
         } else {
           objA.transform.position.x += moveX;
         }
-      } else {
-        // Move both objects for non-platform collisions
-        const halfMove = moveX / 2;
-        objA.transform.position.x += halfMove;
-        objB.transform.position.x -= halfMove;
-      }
-    } else {
-      const moveY = overlapY * (boundsA.centerY < boundsB.centerY ? -1 : 1);
-      if (isPlatformCollision) {
-        // Only move the non-platform object
+      } else if (overlapY > 5) {
+        // Vertical collision - very minimal separation only for deep penetration
+        const moveY = Math.min(overlapY - 5, 1) * (boundsA.centerY < boundsB.centerY ? -1 : 1);
         if (colliderA.layer === 'Platform') {
           objB.transform.position.y += moveY;
         } else {
           objA.transform.position.y += moveY;
         }
+      }
+    } else {
+      // For non-platform collisions, do full separation
+      if (overlapX < overlapY) {
+        const moveX = overlapX * (boundsA.centerX < boundsB.centerX ? -1 : 1);
+        const halfMove = moveX / 2;
+        objA.transform.position.x += halfMove;
+        objB.transform.position.x -= halfMove;
       } else {
-        // Move both objects for non-platform collisions
+        const moveY = overlapY * (boundsA.centerY < boundsB.centerY ? -1 : 1);
         const halfMove = moveY / 2;
         objA.transform.position.y += halfMove;
         objB.transform.position.y -= halfMove;
