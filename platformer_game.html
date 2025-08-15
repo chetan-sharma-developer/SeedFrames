@@ -294,6 +294,12 @@
             update(deltaTime) {
                 super.update(deltaTime);
                 
+                // Sync velocity with rigidbody
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    rigidbody.velocity = this.velocity;
+                }
+                
                 // Handle invulnerability
                 if (this.invulnerable) {
                     this.invulnerabilityTime -= deltaTime;
@@ -340,6 +346,9 @@
                 // Update animation state
                 this.updateAnimationState();
                 
+                // Check if still grounded
+                this.checkGroundCollision();
+                
                 // Check boundaries
                 this.checkBoundaries();
             }
@@ -357,6 +366,51 @@
                 } else {
                     this.animationState = 'idle';
                     renderer.color = '#3498db';
+                }
+            }
+            
+            checkGroundCollision() {
+                // Check if player is currently colliding with any platform
+                const playerCollider = this.gameObject.getComponent(GameEngine.Collider);
+                if (!playerCollider) return;
+                
+                let foundGround = false;
+                
+                // Check collision with all platforms
+                platforms.forEach(platform => {
+                    if (!platform) return;
+                    
+                    const platformCollider = platform.getComponent(GameEngine.Collider);
+                    if (!platformCollider) return;
+                    
+                    const playerPos = this.gameObject.transform.position;
+                    const platformPos = platform.transform.position;
+                    
+                    // Check if player is above the platform
+                    const playerBottom = playerPos.y + (playerCollider.height / 2);
+                    const platformTop = platformPos.y - (platformCollider.height / 2);
+                    const platformLeft = platformPos.x - (platformCollider.width / 2);
+                    const platformRight = platformPos.x + (platformCollider.width / 2);
+                    const playerLeft = playerPos.x - (playerCollider.width / 2);
+                    const playerRight = playerPos.x + (playerCollider.width / 2);
+                    
+                    // Check if horizontally overlapping and vertically close
+                    const horizontalOverlap = playerRight > platformLeft && playerLeft < platformRight;
+                    const verticallyClose = Math.abs(playerBottom - platformTop) < 5;
+                    
+                    if (horizontalOverlap && verticallyClose && this.velocity.y >= 0) {
+                        foundGround = true;
+                        // Snap to platform top
+                        this.gameObject.transform.position.y = platformTop - (playerCollider.height / 2);
+                        this.velocity.y = 0;
+                        this.isGrounded = true;
+                        this.lastGroundedTime = 0;
+                    }
+                });
+                
+                // If no ground found and player was grounded, mark as not grounded
+                if (!foundGround && this.velocity.y > 0) {
+                    this.isGrounded = false;
                 }
             }
             
@@ -398,6 +452,46 @@
                 this.velocity = new GameEngine.Vector2(0, 0);
                 this.doubleJumpAvailable = true;
                 this.dashCooldown = 0;
+            }
+            
+            onCollisionEnter(other) {
+                const otherCollider = other.getComponent(GameEngine.Collider);
+                if (!otherCollider) return;
+                
+                // Check collision with platforms
+                if (otherCollider.layer === 'Platform') {
+                    const playerPos = this.gameObject.transform.position;
+                    const platformPos = other.transform.position;
+                    const playerCollider = this.gameObject.getComponent(GameEngine.Collider);
+                    
+                    // Check if player is above the platform (landing on top)
+                    const playerBottom = playerPos.y + (playerCollider.height / 2);
+                    const platformTop = platformPos.y - (otherCollider.height / 2);
+                    
+                    if (this.velocity.y > 0 && playerBottom >= platformTop && playerBottom <= platformTop + 10) {
+                        // Player is landing on top of platform
+                        this.velocity.y = 0;
+                        this.isGrounded = true;
+                        this.lastGroundedTime = 0;
+                        this.gameObject.transform.position.y = platformTop - (playerCollider.height / 2);
+                        
+                        if (this.onLanding) {
+                            this.onLanding();
+                        }
+                    }
+                }
+            }
+            
+            onCollisionExit(other) {
+                const otherCollider = other.getComponent(GameEngine.Collider);
+                if (otherCollider && otherCollider.layer === 'Platform') {
+                    // Small delay before marking as not grounded to allow for platform edges
+                    setTimeout(() => {
+                        if (this.velocity.y > 10) { // Only if falling
+                            this.isGrounded = false;
+                        }
+                    }, 50);
+                }
             }
         }
 
@@ -890,6 +984,7 @@
                 .at(gameState.playerStartX, gameState.playerStartY)
                 .withColor('#3498db', 24, 32)
                 .withCollider('box', 24, 32, false, 'Player')
+                .withRigidbody()
                 .build();
             
             player.addComponent(new AdvancedPlatformerPlayer({
