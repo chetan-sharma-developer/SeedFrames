@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Platformer - SeedFrames Engine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            border: 3px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: #000;
+            position: relative;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        #game-over-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+            z-index: 200;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            z-index: 100;
+        }
+        
+        .button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-overlay">
+            <div>Score: <span id="score">0</span></div>
+            <div>Lives: <span id="lives">3</span></div>
+            <div>Level: <span id="level">1</span></div>
+        </div>
+        
+        <div id="game-over-screen">
+            <h2>Game Over!</h2>
+            <div>Final Score: <span id="final-score">0</span></div>
+            <button class="button" onclick="restartGame()">Play Again</button>
+        </div>
+        
+        <div id="instructions">
+            Arrow Keys: Move | Spacebar: Jump | X: Double Jump | Z: Dash | R: Restart | M: Toggle Sound
+        </div>
+    </div>
+
+    <script src="./seedframes.js"></script>
+    <script>
+        // ==================== GAME STATE ====================
+        let gameState = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            gameOver: false,
+            playerStartX: 100,
+            playerStartY: 400,
+            maxLevel: 3
+        };
+
+        // ==================== AUDIO SYSTEM ====================
+        class AudioManager {
+            constructor() {
+                this.context = null;
+                this.sounds = {};
+                this.enabled = true;
+                this.masterVolume = 0.3;
+                this.initAudio();
+            }
+
+            initAudio() {
+                try {
+                    this.context = new (window.AudioContext || window.webkitAudioContext)();
+                    this.createSounds();
+                } catch (e) {
+                    console.warn('Web Audio API not supported');
+                    this.enabled = false;
+                }
+            }
+
+            createSounds() {
+                // Create programmatic sound effects
+                this.sounds.jump = this.createTone(800, 0.1, 'square');
+                this.sounds.collect = this.createTone(1200, 0.15, 'sine');
+                this.sounds.damage = this.createNoiseSound(0.3);
+                this.sounds.dash = this.createSweepTone(400, 800, 0.1);
+                this.sounds.enemy_hit = this.createTone(200, 0.2, 'sawtooth');
+            }
+
+            createTone(frequency, duration, type = 'sine') {
+                return () => {
+                    if (!this.enabled || !this.context) return;
+                    
+                    const oscillator = this.context.createOscillator();
+                    const gainNode = this.context.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.context.destination);
+                    
+                    oscillator.frequency.value = frequency;
+                    oscillator.type = type;
+                    
+                    gainNode.gain.setValueAtTime(0, this.context.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(this.masterVolume * 0.1, this.context.currentTime + 0.01);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, this.context.currentTime + duration);
+                    
+                    oscillator.start(this.context.currentTime);
+                    oscillator.stop(this.context.currentTime + duration);
+                };
+            }
+
+            createSweepTone(startFreq, endFreq, duration) {
+                return () => {
+                    if (!this.enabled || !this.context) return;
+                    
+                    const oscillator = this.context.createOscillator();
+                    const gainNode = this.context.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.context.destination);
+                    
+                    oscillator.frequency.setValueAtTime(startFreq, this.context.currentTime);
+                    oscillator.frequency.linearRampToValueAtTime(endFreq, this.context.currentTime + duration);
+                    oscillator.type = 'square';
+                    
+                    gainNode.gain.setValueAtTime(this.masterVolume * 0.15, this.context.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, this.context.currentTime + duration);
+                    
+                    oscillator.start(this.context.currentTime);
+                    oscillator.stop(this.context.currentTime + duration);
+                };
+            }
+
+            createNoiseSound(duration) {
+                return () => {
+                    if (!this.enabled || !this.context) return;
+                    
+                    const bufferSize = this.context.sampleRate * duration;
+                    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    
+                    for (let i = 0; i < bufferSize; i++) {
+                        output[i] = Math.random() * 2 - 1;
+                    }
+                    
+                    const whiteNoise = this.context.createBufferSource();
+                    const gainNode = this.context.createGain();
+                    
+                    whiteNoise.buffer = buffer;
+                    whiteNoise.connect(gainNode);
+                    gainNode.connect(this.context.destination);
+                    
+                    gainNode.gain.setValueAtTime(this.masterVolume * 0.1, this.context.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, this.context.currentTime + duration);
+                    
+                    whiteNoise.start(this.context.currentTime);
+                };
+            }
+
+            play(soundName) {
+                if (this.sounds[soundName] && this.enabled) {
+                    this.sounds[soundName]();
+                }
+            }
+
+            setVolume(volume) {
+                this.masterVolume = Math.max(0, Math.min(1, volume));
+            }
+
+            toggle() {
+                this.enabled = !this.enabled;
+                return this.enabled;
+            }
+        }
+
+        const audioManager = new AudioManager();
+
+        // ==================== GAME INITIALIZATION ====================
+        const engine = new GameEngine.SeedFrames({
+            width: 1000,
+            height: 600,
+            containerId: 'game-container',
+            backgroundColor: '#87CEEB',
+            debug: false
+        });
+
+        // ==================== SCENES ====================
+        const gameScene = engine.createScene('GameScene');
+        let player, camera;
+        let platforms = [];
+        let enemies = [];
+        let collectibles = [];
+        let hazards = [];
+        let particles = [];
+
+        // ==================== CUSTOM COMPONENTS ====================
+        
+        // Enhanced Player Component with Advanced Platformer Features
+        class AdvancedPlatformerPlayer extends GameEngine.PlatformerPlayer {
+            constructor(config = {}) {
+                super({
+                    speed: 250,
+                    jumpForce: 500,
+                    gravity: 1200,
+                    coyoteTime: 0.15,
+                    jumpBufferTime: 0.1,
+                    maxFallSpeed: 800,
+                    ...config
+                });
+                
+                this.doubleJumpAvailable = true;
+                this.dashAvailable = true;
+                this.dashCooldown = 0;
+                this.dashForce = 400;
+                this.invulnerable = false;
+                this.invulnerabilityTime = 0;
+                this.animationState = 'idle';
+                this.facingDirection = 1;
+            }
+
+            update(deltaTime) {
+                super.update(deltaTime);
+                
+                // Handle invulnerability
+                if (this.invulnerable) {
+                    this.invulnerabilityTime -= deltaTime;
+                    if (this.invulnerabilityTime <= 0) {
+                        this.invulnerable = false;
+                        this.gameObject.getComponent(GameEngine.SpriteRenderer).alpha = 1.0;
+                    } else {
+                        // Flashing effect
+                        const flash = Math.sin(this.invulnerabilityTime * 20) > 0;
+                        this.gameObject.getComponent(GameEngine.SpriteRenderer).alpha = flash ? 0.3 : 1.0;
+                    }
+                }
+                
+                // Handle dash cooldown
+                if (this.dashCooldown > 0) {
+                    this.dashCooldown -= deltaTime;
+                }
+                
+                // Double jump
+                if (engine.inputManager.isKeyPressed('KeyX') && this.doubleJumpAvailable && !this.isGrounded) {
+                    this.velocity.y = -this.jumpForce * 0.8;
+                    this.doubleJumpAvailable = false;
+                    createJumpParticles(this.gameObject.transform.position);
+                    audioManager.play('jump');
+                }
+                
+                // Dash ability
+                if (engine.inputManager.isKeyPressed('KeyZ') && this.dashAvailable && this.dashCooldown <= 0) {
+                    this.velocity.x = this.facingDirection * this.dashForce;
+                    this.dashCooldown = 1.0;
+                    createDashParticles(this.gameObject.transform.position);
+                    audioManager.play('dash');
+                }
+                
+                // Reset double jump when grounded
+                if (this.isGrounded) {
+                    this.doubleJumpAvailable = true;
+                }
+                
+                // Update facing direction
+                if (this.velocity.x > 0) this.facingDirection = 1;
+                else if (this.velocity.x < 0) this.facingDirection = -1;
+                
+                // Update animation state
+                this.updateAnimationState();
+                
+                // Check boundaries
+                this.checkBoundaries();
+            }
+            
+            updateAnimationState() {
+                const renderer = this.gameObject.getComponent(GameEngine.SpriteRenderer);
+                if (!renderer) return;
+                
+                if (!this.isGrounded) {
+                    this.animationState = 'jumping';
+                    renderer.color = '#4a90e2';
+                } else if (Math.abs(this.velocity.x) > 10) {
+                    this.animationState = 'running';
+                    renderer.color = '#2ecc71';
+                } else {
+                    this.animationState = 'idle';
+                    renderer.color = '#3498db';
+                }
+            }
+            
+            checkBoundaries() {
+                const pos = this.gameObject.transform.position;
+                
+                // Fall off the bottom = lose life
+                if (pos.y > 700) {
+                    this.takeDamage();
+                }
+                
+                // Keep player in horizontal bounds
+                if (pos.x < -50) {
+                    this.gameObject.transform.position.x = -50;
+                    this.velocity.x = 0;
+                }
+            }
+            
+            takeDamage() {
+                if (this.invulnerable) return;
+                
+                gameState.lives--;
+                updateUI();
+                
+                if (gameState.lives <= 0) {
+                    endGame();
+                } else {
+                    this.respawnPlayer();
+                    this.invulnerable = true;
+                    this.invulnerabilityTime = 2.0;
+                }
+                
+                createExplosionParticles(this.gameObject.transform.position);
+                audioManager.play('damage');
+            }
+            
+            respawnPlayer() {
+                this.gameObject.transform.position = new GameEngine.Vector2(gameState.playerStartX, gameState.playerStartY);
+                this.velocity = new GameEngine.Vector2(0, 0);
+                this.doubleJumpAvailable = true;
+                this.dashCooldown = 0;
+            }
+        }
+
+        // Enemy AI Component
+        class EnemyAI extends GameEngine.Component {
+            constructor(type = 'patrol', speed = 100) {
+                super();
+                this.type = type;
+                this.speed = speed;
+                this.direction = 1;
+                this.detectionRange = 150;
+                this.patrolDistance = 100;
+                this.startX = 0;
+                this.health = 1;
+            }
+            
+            start() {
+                this.startX = this.gameObject.transform.position.x;
+                this.player = gameScene.findGameObjectWithComponent(AdvancedPlatformerPlayer);
+            }
+            
+            update(deltaTime) {
+                switch (this.type) {
+                    case 'patrol':
+                        this.patrolBehavior(deltaTime);
+                        break;
+                    case 'chase':
+                        this.chaseBehavior(deltaTime);
+                        break;
+                    case 'jump':
+                        this.jumpBehavior(deltaTime);
+                        break;
+                }
+                
+                this.updateVisuals();
+            }
+            
+            patrolBehavior(deltaTime) {
+                const pos = this.gameObject.transform.position;
+                const movement = this.speed * this.direction * deltaTime;
+                
+                // Check patrol boundaries
+                if (pos.x >= this.startX + this.patrolDistance || pos.x <= this.startX - this.patrolDistance) {
+                    this.direction *= -1;
+                }
+                
+                pos.x += movement;
+            }
+            
+            chaseBehavior(deltaTime) {
+                if (!this.player) return;
+                
+                const pos = this.gameObject.transform.position;
+                const playerPos = this.player.transform.position;
+                const distance = pos.distance(playerPos);
+                
+                if (distance < this.detectionRange) {
+                    const direction = playerPos.x > pos.x ? 1 : -1;
+                    pos.x += this.speed * direction * deltaTime;
+                    this.direction = direction;
+                }
+            }
+            
+            jumpBehavior(deltaTime) {
+                const rigidbody = this.gameObject.getComponent(GameEngine.Rigidbody);
+                if (rigidbody && Math.random() < 0.01) { // Random jump chance
+                    rigidbody.velocity.y = -300;
+                }
+                this.patrolBehavior(deltaTime);
+            }
+            
+            updateVisuals() {
+                const renderer = this.gameObject.getComponent(GameEngine.SpriteRenderer);
+                if (renderer) {
+                    // Simple color-based animation
+                    const time = Date.now() * 0.005;
+                    const brightness = 0.5 + 0.3 * Math.sin(time);
+                    renderer.color = `hsl(0, 70%, ${brightness * 100}%)`;
+                }
+            }
+            
+            onCollisionEnter(other) {
+                const playerComponent = other.getComponent(AdvancedPlatformerPlayer);
+                if (playerComponent) {
+                    playerComponent.takeDamage();
+                }
+            }
+            
+            takeDamage() {
+                this.health--;
+                if (this.health <= 0) {
+                    gameState.score += 100;
+                    updateUI();
+                    createExplosionParticles(this.gameObject.transform.position);
+                    audioManager.play('enemy_hit');
+                    this.gameObject.destroy();
+                }
+            }
+        }
+
+        // Collectible Component
+        class Collectible extends GameEngine.Component {
+            constructor(value = 50, type = 'coin') {
+                super();
+                this.value = value;
+                this.type = type;
+                this.collected = false;
+                this.bobOffset = Math.random() * Math.PI * 2;
+                this.startY = 0;
+            }
+            
+            start() {
+                this.startY = this.gameObject.transform.position.y;
+            }
+            
+            update(deltaTime) {
+                if (this.collected) return;
+                
+                // Bobbing animation
+                const time = Date.now() * 0.003;
+                this.gameObject.transform.position.y = this.startY + Math.sin(time + this.bobOffset) * 5;
+                
+                // Rotating color effect
+                const renderer = this.gameObject.getComponent(GameEngine.SpriteRenderer);
+                if (renderer) {
+                    const hue = (time * 50 + this.bobOffset * 50) % 360;
+                    renderer.color = `hsl(${hue}, 80%, 60%)`;
+                }
+            }
+            
+            onCollisionEnter(other) {
+                if (this.collected) return;
+                
+                const playerComponent = other.getComponent(AdvancedPlatformerPlayer);
+                if (playerComponent) {
+                    this.collected = true;
+                    gameState.score += this.value;
+                    updateUI();
+                    
+                    createCollectParticles(this.gameObject.transform.position);
+                    audioManager.play('collect');
+                    this.gameObject.destroy();
+                    
+                    // Check if all collectibles collected
+                    checkLevelComplete();
+                }
+            }
+        }
+
+        // Moving Platform Component
+        class MovingPlatform extends GameEngine.Component {
+            constructor(distance = 200, speed = 100, direction = 'horizontal') {
+                super();
+                this.distance = distance;
+                this.speed = speed;
+                this.direction = direction;
+                this.startPos = new GameEngine.Vector2(0, 0);
+                this.moveDirection = 1;
+            }
+            
+            start() {
+                this.startPos = this.gameObject.transform.position.copy();
+            }
+            
+            update(deltaTime) {
+                const pos = this.gameObject.transform.position;
+                const movement = this.speed * this.moveDirection * deltaTime;
+                
+                if (this.direction === 'horizontal') {
+                    pos.x += movement;
+                    
+                    if (pos.x >= this.startPos.x + this.distance || pos.x <= this.startPos.x) {
+                        this.moveDirection *= -1;
+                    }
+                } else {
+                    pos.y += movement;
+                    
+                    if (pos.y >= this.startPos.y + this.distance || pos.y <= this.startPos.y) {
+                        this.moveDirection *= -1;
+                    }
+                }
+            }
+        }
+
+        // ==================== PARTICLE EFFECTS ====================
+        
+        function createJumpParticles(position) {
+            for (let i = 0; i < 8; i++) {
+                const particle = gameScene.createGameObject(`JumpParticle_${Date.now()}_${i}`)
+                    .at(position.x + (Math.random() - 0.5) * 20, position.y + 20)
+                    .withColor('#ffffff', 4, 4)
+                    .build();
+                    
+                const particleComponent = particle.addComponent(new SimpleParticle(
+                    new GameEngine.Vector2((Math.random() - 0.5) * 200, -Math.random() * 100),
+                    1.0
+                ));
+            }
+        }
+        
+        function createDashParticles(position) {
+            for (let i = 0; i < 12; i++) {
+                const particle = gameScene.createGameObject(`DashParticle_${Date.now()}_${i}`)
+                    .at(position.x, position.y)
+                    .withColor('#00ffff', 6, 6)
+                    .build();
+                    
+                const particleComponent = particle.addComponent(new SimpleParticle(
+                    new GameEngine.Vector2((Math.random() - 0.5) * 300, (Math.random() - 0.5) * 200),
+                    0.8
+                ));
+            }
+        }
+        
+        function createCollectParticles(position) {
+            for (let i = 0; i < 10; i++) {
+                const particle = gameScene.createGameObject(`CollectParticle_${Date.now()}_${i}`)
+                    .at(position.x, position.y)
+                    .withColor('#ffd700', 3, 3)
+                    .build();
+                    
+                const particleComponent = particle.addComponent(new SimpleParticle(
+                    new GameEngine.Vector2((Math.random() - 0.5) * 150, -Math.random() * 200),
+                    1.2
+                ));
+            }
+        }
+        
+        function createExplosionParticles(position) {
+            for (let i = 0; i < 15; i++) {
+                const particle = gameScene.createGameObject(`ExplosionParticle_${Date.now()}_${i}`)
+                    .at(position.x, position.y)
+                    .withColor('#ff4444', 8, 8)
+                    .build();
+                    
+                const particleComponent = particle.addComponent(new SimpleParticle(
+                    new GameEngine.Vector2((Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300),
+                    0.6
+                ));
+            }
+        }
+
+        // Simple Particle Component
+        class SimpleParticle extends GameEngine.Component {
+            constructor(velocity, lifetime) {
+                super();
+                this.velocity = velocity;
+                this.lifetime = lifetime;
+                this.maxLifetime = lifetime;
+                this.gravity = 500;
+            }
+            
+            update(deltaTime) {
+                this.lifetime -= deltaTime;
+                
+                if (this.lifetime <= 0) {
+                    this.gameObject.destroy();
+                    return;
+                }
+                
+                // Apply gravity
+                this.velocity.y += this.gravity * deltaTime;
+                
+                // Move particle
+                const pos = this.gameObject.transform.position;
+                pos.x += this.velocity.x * deltaTime;
+                pos.y += this.velocity.y * deltaTime;
+                
+                // Fade out
+                const renderer = this.gameObject.getComponent(GameEngine.SpriteRenderer);
+                if (renderer) {
+                    renderer.alpha = this.lifetime / this.maxLifetime;
+                }
+            }
+        }
+
+        // ==================== LEVEL CREATION ====================
+        
+        function createLevel(levelNumber) {
+            // Clear existing level
+            clearLevel();
+            
+            // Reset player position
+            gameState.playerStartX = 100;
+            gameState.playerStartY = 400;
+            
+            switch (levelNumber) {
+                case 1:
+                    createLevel1();
+                    break;
+                case 2:
+                    createLevel2();
+                    break;
+                case 3:
+                    createLevel3();
+                    break;
+                default:
+                    createLevel1();
+            }
+        }
+        
+        function createLevel1() {
+            // Ground platforms
+            createPlatform(0, 550, 1000, 50, '#2c3e50');
+            createPlatform(200, 450, 200, 20, '#34495e');
+            createPlatform(500, 350, 150, 20, '#34495e');
+            createPlatform(750, 250, 200, 20, '#34495e');
+            
+            // Floating platforms
+            createPlatform(300, 200, 100, 20, '#7f8c8d');
+            createPlatform(600, 150, 120, 20, '#7f8c8d');
+            
+            // Enemies
+            createEnemy(250, 420, 'patrol', 80);
+            createEnemy(550, 320, 'patrol', 60);
+            createEnemy(800, 220, 'chase', 120);
+            
+            // Collectibles
+            createCollectible(350, 170, 50, 'coin');
+            createCollectible(650, 120, 50, 'coin');
+            createCollectible(850, 200, 100, 'gem');
+            createCollectible(450, 320, 50, 'coin');
+            createCollectible(900, 220, 50, 'coin');
+        }
+        
+        function createLevel2() {
+            // More complex platform layout
+            createPlatform(0, 550, 200, 50, '#2c3e50');
+            createPlatform(300, 550, 200, 50, '#2c3e50');
+            createPlatform(600, 550, 400, 50, '#2c3e50');
+            
+            // Multi-level platforms
+            createPlatform(100, 450, 150, 20, '#34495e');
+            createPlatform(350, 400, 100, 20, '#34495e');
+            createPlatform(550, 350, 200, 20, '#34495e');
+            createPlatform(150, 300, 120, 20, '#34495e');
+            createPlatform(400, 250, 150, 20, '#34495e');
+            createPlatform(700, 200, 100, 20, '#34495e');
+            
+            // Moving platforms
+            createMovingPlatform(250, 500, 100, 60, 'horizontal');
+            createMovingPlatform(800, 400, 100, 80, 'vertical');
+            
+            // More enemies with different behaviors
+            createEnemy(120, 420, 'jump', 100);
+            createEnemy(400, 370, 'patrol', 90);
+            createEnemy(600, 320, 'chase', 150);
+            createEnemy(450, 220, 'patrol', 70);
+            
+            // Hazards
+            createHazard(500, 530, 20, 20);
+            createHazard(520, 530, 20, 20);
+            createHazard(540, 530, 20, 20);
+            
+            // More collectibles
+            createCollectible(175, 270, 50, 'coin');
+            createCollectible(475, 220, 75, 'gem');
+            createCollectible(750, 170, 50, 'coin');
+            createCollectible(350, 370, 50, 'coin');
+            createCollectible(650, 320, 50, 'coin');
+            createCollectible(850, 350, 100, 'gem');
+        }
+        
+        function createLevel3() {
+            // Challenge level with complex layout
+            createPlatform(0, 550, 150, 50, '#2c3e50');
+            createPlatform(250, 550, 150, 50, '#2c3e50');
+            createPlatform(500, 550, 150, 50, '#2c3e50');
+            createPlatform(750, 550, 250, 50, '#2c3e50');
+            
+            // Challenging jumps
+            createPlatform(50, 400, 80, 20, '#34495e');
+            createPlatform(200, 300, 60, 20, '#34495e');
+            createPlatform(350, 450, 80, 20, '#34495e');
+            createPlatform(500, 350, 100, 20, '#34495e');
+            createPlatform(650, 250, 80, 20, '#34495e');
+            createPlatform(800, 150, 120, 20, '#34495e');
+            
+            // Multiple moving platforms
+            createMovingPlatform(150, 450, 80, 100, 'vertical');
+            createMovingPlatform(600, 400, 120, 80, 'horizontal');
+            createMovingPlatform(300, 200, 100, 60, 'vertical');
+            
+            // Many enemies
+            createEnemy(80, 370, 'chase', 120);
+            createEnemy(230, 270, 'jump', 150);
+            createEnemy(380, 420, 'patrol', 100);
+            createEnemy(550, 320, 'chase', 180);
+            createEnemy(680, 220, 'jump', 130);
+            
+            // More hazards
+            createHazard(180, 530, 20, 20);
+            createHazard(200, 530, 20, 20);
+            createHazard(220, 530, 20, 20);
+            createHazard(420, 530, 20, 20);
+            createHazard(440, 530, 20, 20);
+            createHazard(460, 530, 20, 20);
+            createHazard(480, 530, 20, 20);
+            
+            // High-value collectibles
+            createCollectible(80, 370, 75, 'gem');
+            createCollectible(230, 270, 50, 'coin');
+            createCollectible(550, 320, 100, 'gem');
+            createCollectible(710, 220, 75, 'gem');
+            createCollectible(860, 120, 150, 'gem');
+            createCollectible(380, 420, 50, 'coin');
+            createCollectible(330, 170, 100, 'gem');
+        }
+
+        // ==================== GAME OBJECT CREATION FUNCTIONS ====================
+        
+        function createPlatform(x, y, width, height, color = '#34495e') {
+            const platform = gameScene.createGameObject(`Platform_${x}_${y}`)
+                .at(x, y)
+                .withColor(color, width, height)
+                .withCollider('box', width, height, false, 'Platform')
+                .build();
+            
+            platforms.push(platform);
+            return platform;
+        }
+        
+        function createMovingPlatform(x, y, width, height, direction = 'horizontal') {
+            const platform = gameScene.createGameObject(`MovingPlatform_${x}_${y}`)
+                .at(x, y)
+                .withColor('#9b59b6', width, height)
+                .withCollider('box', width, height, false, 'Platform')
+                .build();
+            
+            platform.addComponent(new MovingPlatform(150, 80, direction));
+            platforms.push(platform);
+            return platform;
+        }
+        
+        function createEnemy(x, y, type = 'patrol', speed = 100) {
+            const enemy = gameScene.createGameObject(`Enemy_${x}_${y}`)
+                .at(x, y)
+                .withColor('#e74c3c', 24, 24)
+                .withCollider('box', 24, 24, false, 'Enemy')
+                .build();
+            
+            enemy.addComponent(new EnemyAI(type, speed));
+            
+            if (type !== 'jump') {
+                enemy.addComponent(new GameEngine.Rigidbody());
+            }
+            
+            enemies.push(enemy);
+            return enemy;
+        }
+        
+        function createCollectible(x, y, value = 50, type = 'coin') {
+            const size = type === 'gem' ? 20 : 16;
+            const collectible = gameScene.createGameObject(`Collectible_${x}_${y}`)
+                .at(x, y)
+                .withColor('#f1c40f', size, size)
+                .withCollider('box', size, size, true, 'Collectible')
+                .build();
+            
+            collectible.addComponent(new Collectible(value, type));
+            collectibles.push(collectible);
+            return collectible;
+        }
+        
+        function createHazard(x, y, width = 20, height = 20) {
+            const hazard = gameScene.createGameObject(`Hazard_${x}_${y}`)
+                .at(x, y)
+                .withColor('#ff0000', width, height)
+                .withCollider('box', width, height, true, 'Hazard')
+                .build();
+            
+            // Add damage component
+            hazard.addComponent(new class extends GameEngine.Component {
+                onCollisionEnter(other) {
+                    const playerComponent = other.getComponent(AdvancedPlatformerPlayer);
+                    if (playerComponent) {
+                        playerComponent.takeDamage();
+                    }
+                }
+            });
+            
+            hazards.push(hazard);
+            return hazard;
+        }
+
+        // ==================== GAME LOGIC ====================
+        
+        function createPlayer() {
+            player = gameScene.createGameObject('Player')
+                .at(gameState.playerStartX, gameState.playerStartY)
+                .withColor('#3498db', 24, 32)
+                .withCollider('box', 24, 32, false, 'Player')
+                .build();
+            
+            player.addComponent(new AdvancedPlatformerPlayer({
+                speed: 250,
+                jumpForce: 500,
+                gravity: 1200,
+                onJump: () => {
+                    createJumpParticles(player.transform.position);
+                    audioManager.play('jump');
+                },
+                onLanding: () => {}
+            }));
+            
+            return player;
+        }
+        
+        function setupPhysics() {
+            // Set up collision rules
+            engine.physicsEngine.setCollisionRule('Player', 'Platform', true);
+            engine.physicsEngine.setCollisionRule('Player', 'Enemy', true);
+            engine.physicsEngine.setCollisionRule('Player', 'Collectible', true);
+            engine.physicsEngine.setCollisionRule('Player', 'Hazard', true);
+            engine.physicsEngine.setCollisionRule('Enemy', 'Platform', true);
+            engine.physicsEngine.setCollisionRule('Enemy', 'Enemy', false);
+        }
+        
+        function setupCamera() {
+            camera = gameScene.camera;
+            camera.follow(player);
+            camera.setBounds(-100, -100, 1200, 800);
+        }
+        
+        function clearLevel() {
+            // Remove all level objects
+            [...platforms, ...enemies, ...collectibles, ...hazards].forEach(obj => {
+                if (obj && obj.destroy) {
+                    obj.destroy();
+                }
+            });
+            
+            platforms = [];
+            enemies = [];
+            collectibles = [];
+            hazards = [];
+        }
+        
+        function checkLevelComplete() {
+            const remainingCollectibles = collectibles.filter(c => c && !c.getComponent(Collectible).collected);
+            
+            if (remainingCollectibles.length === 0) {
+                gameState.level++;
+                
+                if (gameState.level > gameState.maxLevel) {
+                    // Game completed!
+                    gameState.score += 1000; // Bonus for completing game
+                    updateUI();
+                    setTimeout(() => {
+                        alert('Congratulations! You completed all levels!\nFinal Score: ' + gameState.score);
+                        restartGame();
+                    }, 1000);
+                } else {
+                    // Next level
+                    gameState.score += 500; // Level completion bonus
+                    updateUI();
+                    setTimeout(() => {
+                        createLevel(gameState.level);
+                        if (player) {
+                            player.getComponent(AdvancedPlatformerPlayer).respawnPlayer();
+                        }
+                    }, 1000);
+                }
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('lives').textContent = gameState.lives;
+            document.getElementById('level').textContent = gameState.level;
+        }
+        
+        function endGame() {
+            gameState.gameOver = true;
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('game-over-screen').style.display = 'block';
+        }
+        
+        function restartGame() {
+            // Reset game state
+            gameState = {
+                score: 0,
+                lives: 3,
+                level: 1,
+                gameOver: false,
+                playerStartX: 100,
+                playerStartY: 400,
+                maxLevel: 3
+            };
+            
+            // Hide game over screen
+            document.getElementById('game-over-screen').style.display = 'none';
+            
+            // Clear and recreate level
+            clearLevel();
+            createLevel(1);
+            
+            // Reset player
+            if (player) {
+                player.getComponent(AdvancedPlatformerPlayer).respawnPlayer();
+                player.getComponent(AdvancedPlatformerPlayer).invulnerable = false;
+                player.getComponent(GameEngine.SpriteRenderer).alpha = 1.0;
+            }
+            
+            updateUI();
+        }
+
+        // ==================== INPUT HANDLING ====================
+        
+        function setupInputHandling() {
+            // Restart key
+            engine.inputManager.onKeyPressed('KeyR', () => {
+                if (!gameState.gameOver) {
+                    restartGame();
+                }
+            });
+            
+            // Pause key
+            engine.inputManager.onKeyPressed('KeyP', () => {
+                if (engine.gameLoop.isRunning) {
+                    engine.pause();
+                } else {
+                    engine.resume();
+                }
+            });
+            
+            // Debug toggle
+            engine.inputManager.onKeyPressed('KeyD', () => {
+                engine.setDebugMode(!GameEngine.Debug.enabled);
+            });
+            
+            // Sound toggle
+            engine.inputManager.onKeyPressed('KeyM', () => {
+                const soundEnabled = audioManager.toggle();
+                console.log(`Sound ${soundEnabled ? 'enabled' : 'disabled'}`);
+            });
+        }
+
+        // ==================== INITIALIZATION ====================
+        
+        function initializeGame() {
+            // Create player
+            createPlayer();
+            
+            // Setup systems
+            setupPhysics();
+            setupCamera();
+            setupInputHandling();
+            
+            // Create first level
+            createLevel(1);
+            
+            // Update UI
+            updateUI();
+            
+            // Add scene to manager and start
+            engine.sceneManager.add('game', gameScene);
+            engine.sceneManager.load('game');
+            engine.start();
+            
+            console.log('Advanced Platformer Game Initialized!');
+            console.log('Controls: Arrow Keys = Move, Spacebar = Jump, X = Double Jump, Z = Dash');
+            console.log('Additional: R = Restart, P = Pause, D = Debug Mode, M = Toggle Sound');
+        }
+
+        // Start the game when page loads
+        window.addEventListener('load', () => {
+            setTimeout(initializeGame, 100);
+        });
+
+        // Global restart function for button
+        window.restartGame = restartGame;
+    </script>
+</body>
+</html>
