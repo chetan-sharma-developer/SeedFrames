@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mind Bender - SeedFrames Engine</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .game-container {
+            border: 3px solid #9b59b6;
+            border-radius: 10px;
+            margin: 20px auto;
+            display: inline-block;
+            box-shadow: 0 0 20px rgba(155, 89, 182, 0.5);
+        }
+        
+        .game-info {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px auto;
+            max-width: 800px;
+        }
+        
+        .controls {
+            background: rgba(155, 89, 182, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 10px 0;
+        }
+        
+        .stat {
+            background: rgba(102, 126, 234, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            min-width: 120px;
+        }
+        
+        h1 {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+            color: #9b59b6;
+        }
+        
+        .puzzle-info {
+            background: rgba(52, 152, 219, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .difficulty-selector {
+            background: rgba(46, 204, 113, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .hint-system {
+            background: rgba(241, 196, 15, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 2px solid #f1c40f;
+        }
+        
+        .puzzle-grid {
+            display: grid;
+            gap: 2px;
+            margin: 20px auto;
+            background: #34495e;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .puzzle-tile {
+            width: 60px;
+            height: 60px;
+            background: #3498db;
+            border: 2px solid #2980b9;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .puzzle-tile:hover {
+            background: #5dade2;
+            transform: scale(1.05);
+        }
+        
+        .puzzle-tile.empty {
+            background: #2c3e50;
+            border-color: #34495e;
+        }
+        
+        .puzzle-tile.correct {
+            background: #27ae60;
+            border-color: #229954;
+        }
+        
+        .puzzle-tile.wrong {
+            background: #e74c3c;
+            border-color: #c0392b;
+        }
+        
+        .puzzle-tile.selected {
+            background: #f39c12;
+            border-color: #e67e22;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧩 Mind Bender</h1>
+    
+    <div class="game-info">
+        <div class="difficulty-selector">
+            <strong>Difficulty: <span id="current-difficulty">Easy</span></strong>
+            <button onclick="setDifficulty('easy')">Easy (3x3)</button>
+            <button onclick="setDifficulty('medium')">Medium (4x4)</button>
+            <button onclick="setDifficulty('hard')">Hard (5x5)</button>
+        </div>
+        
+        <div class="puzzle-info">
+            <strong>Puzzle Type: <span id="puzzle-type">Sliding Tiles</span></strong>
+            <button onclick="setPuzzleType('sliding')">Sliding Tiles</button>
+            <button onclick="setPuzzleType('pattern')">Pattern Match</button>
+            <button onclick="setPuzzleType('color')">Color Sequence</button>
+        </div>
+        
+        <div class="hint-system">
+            <strong>Hints Available: <span id="hints-left">3</span></strong>
+            <button onclick="useHint()">Use Hint</button>
+            <button onclick="showSolution()">Show Solution</button>
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <strong>Moves:</strong><br>
+                <span id="moves">0</span>
+            </div>
+            <div class="stat">
+                <strong>Time:</strong><br>
+                <span id="time">00:00</span>
+            </div>
+            <div class="stat">
+                <strong>Best Time:</strong><br>
+                <span id="best-time">--:--</span>
+            </div>
+            <div class="stat">
+                <strong>Puzzles Solved:</strong><br>
+                <span id="puzzles-solved">0</span>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <strong>Controls:</strong><br>
+            <strong>Click</strong> tiles to move them<br>
+            <strong>R</strong> to reset puzzle<br>
+            <strong>N</strong> for new puzzle<br>
+            <strong>H</strong> for hint
+        </div>
+    </div>
+    
+    <div class="game-container" id="game-container"></div>
+    
+    <div id="puzzle-grid" class="puzzle-grid"></div>
+    
+    <script src="./src/seedframes.js"></script>
+    <script>
+        let engine, scene;
+        let gameState = {
+            difficulty: 'easy',
+            puzzleType: 'sliding',
+            gridSize: 3,
+            moves: 0,
+            time: 0,
+            bestTime: Infinity,
+            puzzlesSolved: 0,
+            hintsLeft: 3,
+            puzzleComplete: false,
+            startTime: 0
+        };
+        
+        let puzzleGrid = [];
+        let solutionGrid = [];
+        let selectedTile = null;
+        let gameTimer = null;
+        
+        // Difficulty configurations
+        const difficulties = {
+            easy: { size: 3, name: 'Easy' },
+            medium: { size: 4, name: 'Medium' },
+            hard: { size: 5, name: 'Hard' }
+        };
+        
+        // Puzzle type configurations
+        const puzzleTypes = {
+            sliding: { name: 'Sliding Tiles', description: 'Arrange tiles in order' },
+            pattern: { name: 'Pattern Match', description: 'Match the pattern' },
+            color: { name: 'Color Sequence', description: 'Complete the color sequence' }
+        };
+        
+        function initGame() {
+            try {
+                engine = new GameEngine.SeedFrames({
+                    width: 800,
+                    height: 600,
+                    containerId: 'game-container',
+                    backgroundColor: '#667eea',
+                    debug: false
+                });
+                
+                scene = engine.createScene('PuzzleGame');
+                engine.sceneManager.add('main', scene);
+                engine.sceneManager.load('main');
+                
+                // Create puzzle UI
+                createPuzzleUI();
+                
+                // Start first puzzle
+                startNewPuzzle();
+                
+                engine.start();
+                console.log('Mind Bender started!');
+                
+            } catch (error) {
+                console.error('Failed to initialize game:', error);
+            }
+        }
+        
+        function createPuzzleUI() {
+            // This will be handled by the HTML puzzle grid
+        }
+        
+        function setDifficulty(difficulty) {
+            if (difficulties[difficulty]) {
+                gameState.difficulty = difficulty;
+                gameState.gridSize = difficulties[difficulty].size;
+                document.getElementById('current-difficulty').textContent = difficulties[difficulty].name;
+                startNewPuzzle();
+            }
+        }
+        
+        function setPuzzleType(type) {
+            if (puzzleTypes[type]) {
+                gameState.puzzleType = type;
+                document.getElementById('puzzle-type').textContent = puzzleTypes[type].name;
+                startNewPuzzle();
+            }
+        }
+        
+        function startNewPuzzle() {
+            // Reset game state
+            gameState.moves = 0;
+            gameState.time = 0;
+            gameState.puzzleComplete = false;
+            gameState.hintsLeft = 3;
+            gameState.startTime = Date.now();
+            
+            // Generate puzzle
+            generatePuzzle();
+            
+            // Start timer
+            startTimer();
+            
+            updateUI();
+        }
+        
+        function generatePuzzle() {
+            const size = gameState.gridSize;
+            puzzleGrid = [];
+            solutionGrid = [];
+            
+            // Create solution grid
+            for (let i = 0; i < size; i++) {
+                solutionGrid[i] = [];
+                for (let j = 0; j < size; j++) {
+                    solutionGrid[i][j] = i * size + j + 1;
+                }
+            }
+            solutionGrid[size - 1][size - 1] = 0; // Empty tile
+            
+            // Create puzzle grid (shuffled)
+            puzzleGrid = JSON.parse(JSON.stringify(solutionGrid));
+            shufflePuzzle();
+            
+            // Render puzzle
+            renderPuzzle();
+        }
+        
+        function shufflePuzzle() {
+            const size = gameState.gridSize;
+            const moves = size * size * 10; // Shuffle thoroughly
+            
+            for (let i = 0; i < moves; i++) {
+                const emptyPos = findEmptyTile();
+                const neighbors = getValidMoves(emptyPos);
+                
+                if (neighbors.length > 0) {
+                    const randomNeighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    swapTiles(emptyPos, randomNeighbor);
+                }
+            }
+        }
+        
+        function findEmptyTile() {
+            for (let i = 0; i < gameState.gridSize; i++) {
+                for (let j = 0; j < gameState.gridSize; j++) {
+                    if (puzzleGrid[i][j] === 0) {
+                        return { row: i, col: j };
+                    }
+                }
+            }
+            return null;
+        }
+        
+        function getValidMoves(pos) {
+            const moves = [];
+            const { row, col } = pos;
+            
+            // Check all four directions
+            const directions = [
+                { row: row - 1, col: col }, // Up
+                { row: row + 1, col: col }, // Down
+                { row: row, col: col - 1 }, // Left
+                { row: row, col: col + 1 }  // Right
+            ];
+            
+            directions.forEach(dir => {
+                if (dir.row >= 0 && dir.row < gameState.gridSize &&
+                    dir.col >= 0 && dir.col < gameState.gridSize) {
+                    moves.push(dir);
+                }
+            });
+            
+            return moves;
+        }
+        
+        function swapTiles(pos1, pos2) {
+            const temp = puzzleGrid[pos1.row][pos1.col];
+            puzzleGrid[pos1.row][pos1.col] = puzzleGrid[pos2.row][pos2.col];
+            puzzleGrid[pos2.row][pos2.col] = temp;
+        }
+        
+        function renderPuzzle() {
+            const gridContainer = document.getElementById('puzzle-grid');
+            gridContainer.innerHTML = '';
+            
+            // Set grid template
+            gridContainer.style.gridTemplateColumns = `repeat(${gameState.gridSize}, 1fr)`;
+            
+            for (let i = 0; i < gameState.gridSize; i++) {
+                for (let j = 0; j < gameState.gridSize; j++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'puzzle-tile';
+                    tile.textContent = puzzleGrid[i][j] === 0 ? '' : puzzleGrid[i][j];
+                    
+                    if (puzzleGrid[i][j] === 0) {
+                        tile.classList.add('empty');
+                    }
+                    
+                    // Add click handler
+                    tile.addEventListener('click', () => handleTileClick(i, j));
+                    
+                    gridContainer.appendChild(tile);
+                }
+            }
+        }
+        
+        function handleTileClick(row, col) {
+            if (gameState.puzzleComplete) return;
+            
+            const emptyPos = findEmptyTile();
+            if (!emptyPos) return;
+            
+            // Check if clicked tile is adjacent to empty tile
+            const distance = Math.abs(row - emptyPos.row) + Math.abs(col - emptyPos.col);
+            
+            if (distance === 1) {
+                // Valid move
+                swapTiles({ row, col }, emptyPos);
+                gameState.moves++;
+                
+                // Render updated puzzle
+                renderPuzzle();
+                
+                // Check if puzzle is complete
+                if (checkPuzzleComplete()) {
+                    puzzleComplete();
+                }
+                
+                updateUI();
+            }
+        }
+        
+        function checkPuzzleComplete() {
+            for (let i = 0; i < gameState.gridSize; i++) {
+                for (let j = 0; j < gameState.gridSize; j++) {
+                    if (puzzleGrid[i][j] !== solutionGrid[i][j]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        
+        function puzzleComplete() {
+            gameState.puzzleComplete = true;
+            gameState.puzzlesSolved++;
+            
+            // Calculate time
+            const endTime = Date.now();
+            const puzzleTime = endTime - gameState.startTime;
+            gameState.time = puzzleTime;
+            
+            // Check for best time
+            if (puzzleTime < gameState.bestTime) {
+                gameState.bestTime = puzzleTime;
+                console.log('New best time!');
+            }
+            
+            // Stop timer
+            stopTimer();
+            
+            // Show completion message
+            setTimeout(() => {
+                alert(`Puzzle completed!\nMoves: ${gameState.moves}\nTime: ${formatTime(puzzleTime)}`);
+            }, 500);
+            
+            updateUI();
+        }
+        
+        function useHint() {
+            if (gameState.hintsLeft <= 0 || gameState.puzzleComplete) return;
+            
+            gameState.hintsLeft--;
+            
+            // Find a tile that can be moved
+            const emptyPos = findEmptyTile();
+            const validMoves = getValidMoves(emptyPos);
+            
+            if (validMoves.length > 0) {
+                // Highlight a valid move
+                const randomMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+                highlightTile(randomMove.row, randomMove.col);
+                
+                setTimeout(() => {
+                    removeHighlight(randomMove.row, randomMove.col);
+                }, 2000);
+            }
+            
+            updateUI();
+        }
+        
+        function showSolution() {
+            if (gameState.puzzleComplete) return;
+            
+            // Show solution temporarily
+            const originalGrid = JSON.parse(JSON.stringify(puzzleGrid));
+            
+            // Animate solution
+            animateSolution(solutionGrid, () => {
+                // Restore original puzzle
+                setTimeout(() => {
+                    puzzleGrid = originalGrid;
+                    renderPuzzle();
+                }, 2000);
+            });
+        }
+        
+        function animateSolution(solution, callback) {
+            // Simple animation - just show solution
+            puzzleGrid = JSON.parse(JSON.stringify(solution));
+            renderPuzzle();
+            
+            if (callback) callback();
+        }
+        
+        function highlightTile(row, col) {
+            const tiles = document.querySelectorAll('.puzzle-tile');
+            const index = row * gameState.gridSize + col;
+            if (tiles[index]) {
+                tiles[index].classList.add('selected');
+            }
+        }
+        
+        function removeHighlight(row, col) {
+            const tiles = document.querySelectorAll('.puzzle-tile');
+            const index = row * gameState.gridSize + col;
+            if (tiles[index]) {
+                tiles[index].classList.remove('selected');
+            }
+        }
+        
+        function startTimer() {
+            gameTimer = setInterval(() => {
+                if (!gameState.puzzleComplete) {
+                    gameState.time = Date.now() - gameState.startTime;
+                    updateUI();
+                }
+            }, 1000);
+        }
+        
+        function stopTimer() {
+            if (gameTimer) {
+                clearInterval(gameTimer);
+                gameTimer = null;
+            }
+        }
+        
+        function formatTime(timeMs) {
+            const totalSeconds = Math.floor(timeMs / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        function updateUI() {
+            document.getElementById('moves').textContent = gameState.moves;
+            document.getElementById('time').textContent = formatTime(gameState.time);
+            document.getElementById('puzzles-solved').textContent = gameState.puzzlesSolved;
+            document.getElementById('hints-left').textContent = gameState.hintsLeft;
+            
+            if (gameState.bestTime !== Infinity) {
+                document.getElementById('best-time').textContent = formatTime(gameState.bestTime);
+            }
+        }
+        
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyR':
+                    startNewPuzzle();
+                    break;
+                case 'KeyN':
+                    startNewPuzzle();
+                    break;
+                case 'KeyH':
+                    useHint();
+                    break;
+            }
+        });
+        
+        // Initialize game when page loads
+        window.addEventListener('load', () => {
+            console.log('Mind Bender loading...');
+            setTimeout(initGame, 100);
+        });
+    </script>
+</body>
+</html>
