@@ -202,6 +202,15 @@
         
         function initGame() {
             try {
+                // Check if engine is available
+                if (typeof GameEngine === 'undefined') {
+                    throw new Error('GameEngine not loaded. Please check if seedframes.js is properly loaded.');
+                }
+                
+                if (typeof GameEngine.SeedFrames === 'undefined') {
+                    throw new Error('SeedFrames class not available in GameEngine.');
+                }
+                
                 engine = new GameEngine.SeedFrames({
                     width: 1200,
                     height: 600,
@@ -227,6 +236,18 @@
                 
             } catch (error) {
                 console.error('Failed to initialize game:', error);
+                // Show error to user
+                const container = document.getElementById('game-container');
+                if (container) {
+                    container.innerHTML = `
+                        <div style="color: white; padding: 20px; text-align: center;">
+                            <h3>❌ Game Initialization Failed</h3>
+                            <p>${error.message}</p>
+                            <p>Please check the console for more details.</p>
+                            <button onclick="location.reload()" style="padding: 10px 20px; margin: 10px;">Retry</button>
+                        </div>
+                    `;
+                }
             }
         }
         
@@ -506,10 +527,18 @@
         // Initialize game when page loads
         window.addEventListener('load', () => {
             console.log('Speed Racer loading...');
-            setTimeout(() => {
-                initGame();
-                gameLoop();
-            }, 100);
+            // Wait for engine to be ready
+            const checkEngine = () => {
+                if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                    console.log('Engine ready, initializing game...');
+                    initGame();
+                    gameLoop();
+                } else {
+                    console.log('Engine not ready yet, waiting...');
+                    setTimeout(checkEngine, 100);
+                }
+            };
+            checkEngine();
         });
     </script>
 </body>

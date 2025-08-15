@@ -1101,6 +1101,57 @@ class Collider extends Component {
   }
 }
 
+class Rigidbody extends Component {
+  constructor(mass = 1.0, gravityScale = 1.0) {
+    super();
+    this.mass = mass;
+    this.gravityScale = gravityScale;
+    this.velocity = new Vector2(0, 0);
+    this.acceleration = new Vector2(0, 0);
+    this.force = new Vector2(0, 0);
+    this.drag = 0.98;
+    this.gravity = new Vector2(0, 9.8 * gravityScale);
+    this.useGravity = true;
+    this.isKinematic = false;
+  }
+
+  addForce(force) {
+    this.force = this.force.add(force);
+  }
+
+  setVelocity(velocity) {
+    this.velocity = velocity;
+  }
+
+  update(deltaTime) {
+    if (this.isKinematic) return;
+
+    // Apply forces
+    this.acceleration = this.force.multiplyByScalar(1 / this.mass);
+    
+    // Apply gravity
+    if (this.useGravity) {
+      this.acceleration = this.acceleration.add(this.gravity);
+    }
+    
+    // Update velocity
+    this.velocity = this.velocity.add(this.acceleration.multiplyByScalar(deltaTime));
+    
+    // Apply drag
+    this.velocity = this.velocity.multiplyByScalar(this.drag);
+    
+    // Update position
+    if (this.gameObject && this.gameObject.transform) {
+      this.gameObject.transform.position = this.gameObject.transform.position.add(
+        this.velocity.multiplyByScalar(deltaTime)
+      );
+    }
+    
+    // Reset forces
+    this.force = new Vector2(0, 0);
+  }
+}
+
 class AudioSource extends Component {
   constructor(audioSrc = null, volume = 1.0, loop = false) {
     super();
@@ -4360,6 +4411,7 @@ if (typeof module !== "undefined" && module.exports) {
     Component,
     SpriteRenderer,
     Collider,
+    Rigidbody,
     AudioSource,
     Transform,
     Player,
@@ -4392,11 +4444,12 @@ if (typeof module !== "undefined" && module.exports) {
 
 if (typeof window !== "undefined") {
   window.GameEngine = {
-    SeedFrames: Engine,
+    SeedFrames: SeedFrameEngine,
     GameObject,
     Component,
     SpriteRenderer,
     Collider,
+    Rigidbody,
     AudioSource,
     Transform,
     Player,
@@ -4507,3 +4560,106 @@ console.log(
 console.log(
   "Features: Animation System, Spatial Partitioning, Touch/Gamepad Input, UI System, Particle System, Enhanced Audio, Scene Serialization, Debug Overlay"
 );
+
+// Fallback export to ensure engine is always available
+if (typeof window !== "undefined" && !window.GameEngine) {
+  window.GameEngine = {
+    SeedFrames: SeedFrameEngine,
+    GameObject,
+    Component,
+    SpriteRenderer,
+    Collider,
+    AudioSource,
+    Transform,
+    Player,
+    PlatformerPlayer,
+    RacingPlayer,
+    TopDownPlayer,
+    FlyingPlayer,
+    StateMachine,
+    State,
+    Tilemap,
+    Vector2,
+    Scene,
+    Camera,
+    EventBus,
+    PhysicsLayers,
+    Debug,
+    Quadtree,
+    UISystem,
+    UIElement,
+    UIButton,
+    UIText,
+    UISlider,
+    Particle,
+    ParticleEmitter,
+    Timer,
+    TimerManager,
+  };
+}
+
+// Debug logging to help identify export issues
+if (typeof window !== "undefined") {
+  console.log("GameEngine exported:", window.GameEngine);
+  console.log("SeedFrames available:", window.GameEngine?.SeedFrames);
+  console.log("Player classes available:", {
+    Player: window.GameEngine?.Player,
+    PlatformerPlayer: window.GameEngine?.PlatformerPlayer,
+    RacingPlayer: window.GameEngine?.RacingPlayer,
+    TopDownPlayer: window.GameEngine?.TopDownPlayer,
+    FlyingPlayer: window.GameEngine?.FlyingPlayer
+  });
+}
+
+// Ensure engine is available immediately
+if (typeof window !== "undefined") {
+  // Make sure all classes are available
+  window.GameEngine = window.GameEngine || {};
+  
+  // Ensure all required classes are available
+  const requiredClasses = {
+    SeedFrames: SeedFrameEngine,
+    GameObject,
+    Component,
+    SpriteRenderer,
+    Collider,
+    Rigidbody,
+    AudioSource,
+    Transform,
+    Player,
+    PlatformerPlayer,
+    RacingPlayer,
+    TopDownPlayer,
+    FlyingPlayer,
+    StateMachine,
+    State,
+    Tilemap,
+    Vector2,
+    Scene,
+    Camera,
+    EventBus,
+    PhysicsLayers,
+    Debug,
+    Quadtree,
+    UISystem,
+    UIElement,
+    UIButton,
+    UIText,
+    UISlider,
+    Particle,
+    ParticleEmitter,
+    Timer,
+    TimerManager,
+  };
+  
+  // Merge with existing GameEngine
+  Object.assign(window.GameEngine, requiredClasses);
+  
+  // Emit ready event
+  if (window.GameEngine.EventBus) {
+    const eventBus = new window.GameEngine.EventBus();
+    eventBus.emit('engine_ready');
+  }
+  
+  console.log("Engine ready event emitted");
+}

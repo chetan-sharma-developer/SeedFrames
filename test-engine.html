@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engine Test - SeedFrames</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4a90e2;
+        }
+        .success { border-left-color: #27ae60; }
+        .error { border-left-color: #e74c3c; }
+        .warning { border-left-color: #f39c12; }
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #357abd;
+        }
+        #game-container {
+            border: 2px solid #ccc;
+            margin: 20px 0;
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 SeedFrames Engine Test</h1>
+    
+    <div class="test-section">
+        <h3>Engine Loading Test</h3>
+        <button onclick="testEngineLoading()">Test Engine Loading</button>
+        <div id="loading-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Class Availability Test</h3>
+        <button onclick="testClassAvailability()">Test Classes</button>
+        <div id="class-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Engine Initialization Test</h3>
+        <button onclick="testEngineInit()">Test Engine Init</button>
+        <div id="init-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Scene Creation Test</h3>
+        <button onclick="testSceneCreation()">Test Scene Creation</button>
+        <div id="scene-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Game Object Test</h3>
+        <button onclick="testGameObject()">Test GameObject</button>
+        <div id="gameobject-result"></div>
+    </div>
+    
+    <div id="game-container"></div>
+    
+    <script src="./src/seedframes.js"></script>
+    <script>
+        let engine = null;
+        let scene = null;
+        
+        function logResult(elementId, message, type = 'success') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+        
+        function testEngineLoading() {
+            try {
+                if (typeof GameEngine !== 'undefined') {
+                    logResult('loading-result', '✅ GameEngine loaded successfully!', 'success');
+                    console.log('GameEngine:', GameEngine);
+                } else {
+                    logResult('loading-result', '❌ GameEngine not found!', 'error');
+                }
+            } catch (error) {
+                logResult('loading-result', `❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        function testClassAvailability() {
+            try {
+                const requiredClasses = [
+                    'GameObject', 'Component', 'SpriteRenderer', 'Collider', 
+                    'Rigidbody', 'AudioSource', 'Transform', 'Player',
+                    'PlatformerPlayer', 'RacingPlayer', 'TopDownPlayer', 'FlyingPlayer',
+                    'Vector2', 'Scene', 'Camera', 'EventBus', 'Debug'
+                ];
+                
+                let missingClasses = [];
+                let availableClasses = [];
+                
+                requiredClasses.forEach(className => {
+                    if (GameEngine[className]) {
+                        availableClasses.push(className);
+                    } else {
+                        missingClasses.push(className);
+                    }
+                });
+                
+                let result = `✅ Available: ${availableClasses.length}/${requiredClasses.length}<br>`;
+                result += `📋 Available: ${availableClasses.join(', ')}<br>`;
+                
+                if (missingClasses.length > 0) {
+                    result += `❌ Missing: ${missingClasses.join(', ')}`;
+                    logResult('class-result', result, 'warning');
+                } else {
+                    logResult('class-result', result, 'success');
+                }
+                
+            } catch (error) {
+                logResult('class-result', `❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        function testEngineInit() {
+            try {
+                if (!GameEngine.SeedFrames) {
+                    logResult('init-result', '❌ SeedFrames class not available', 'error');
+                    return;
+                }
+                
+                engine = new GameEngine.SeedFrames({
+                    width: 800,
+                    height: 600,
+                    containerId: 'game-container',
+                    backgroundColor: '#000000',
+                    debug: false
+                });
+                
+                logResult('init-result', '✅ Engine initialized successfully!', 'success');
+                console.log('Engine:', engine);
+                
+            } catch (error) {
+                logResult('init-result', `❌ Error: ${error.message}`, 'error');
+                console.error('Engine init error:', error);
+            }
+        }
+        
+        function testSceneCreation() {
+            try {
+                if (!engine) {
+                    logResult('scene-result', '❌ Engine not initialized', 'error');
+                    return;
+                }
+                
+                scene = engine.createScene('TestScene');
+                engine.sceneManager.add('test', scene);
+                
+                logResult('scene-result', '✅ Scene created successfully!', 'success');
+                console.log('Scene:', scene);
+                
+            } catch (error) {
+                logResult('scene-result', `❌ Error: ${error.message}`, 'error');
+                console.error('Scene creation error:', error);
+            }
+        }
+        
+        function testGameObject() {
+            try {
+                if (!scene) {
+                    logResult('gameobject-result', '❌ Scene not created', 'error');
+                    return;
+                }
+                
+                const gameObject = scene.createGameObject('TestObject')
+                    .at(400, 300)
+                    .withColor('#ff0000', 50, 50)
+                    .withCollider('box', 50, 50, false, 'Test')
+                    .build();
+                
+                logResult('gameobject-result', '✅ GameObject created successfully!', 'success');
+                console.log('GameObject:', gameObject);
+                
+                // Start the engine to see the object
+                if (engine) {
+                    engine.start();
+                }
+                
+            } catch (error) {
+                logResult('gameobject-result', `❌ Error: ${error.message}`, 'error');
+                console.error('GameObject creation error:', error);
+            }
+        }
+        
+        // Auto-run tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testEngineLoading();
+                testClassAvailability();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
