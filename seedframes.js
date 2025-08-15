@@ -4481,14 +4481,39 @@ class PhysicsEngine {
       boundsB.bottom - boundsA.top
     );
 
+    // For platform collisions, only move the non-platform object
+    const isPlatformCollision = colliderA.layer === 'Platform' || colliderB.layer === 'Platform';
+    
     if (overlapX < overlapY) {
-      const moveX = (overlapX / 2) * (boundsA.centerX < boundsB.centerX ? -1 : 1);
-      objA.transform.position.x += moveX;
-      objB.transform.position.x -= moveX;
+      const moveX = overlapX * (boundsA.centerX < boundsB.centerX ? -1 : 1);
+      if (isPlatformCollision) {
+        // Only move the non-platform object
+        if (colliderA.layer === 'Platform') {
+          objB.transform.position.x += moveX;
+        } else {
+          objA.transform.position.x += moveX;
+        }
+      } else {
+        // Move both objects for non-platform collisions
+        const halfMove = moveX / 2;
+        objA.transform.position.x += halfMove;
+        objB.transform.position.x -= halfMove;
+      }
     } else {
-      const moveY = (overlapY / 2) * (boundsA.centerY < boundsB.centerY ? -1 : 1);
-      objA.transform.position.y += moveY;
-      objB.transform.position.y -= moveY;
+      const moveY = overlapY * (boundsA.centerY < boundsB.centerY ? -1 : 1);
+      if (isPlatformCollision) {
+        // Only move the non-platform object
+        if (colliderA.layer === 'Platform') {
+          objB.transform.position.y += moveY;
+        } else {
+          objA.transform.position.y += moveY;
+        }
+      } else {
+        // Move both objects for non-platform collisions
+        const halfMove = moveY / 2;
+        objA.transform.position.y += halfMove;
+        objB.transform.position.y -= halfMove;
+      }
     }
   }
 

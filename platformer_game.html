@@ -730,8 +730,13 @@
             }
             
             onCollisionEnter(other) {
+                // Call parent method to handle platform collisions
+                super.onCollisionEnter(other);
+                
                 const otherCollider = other.getComponent(GameEngine.Collider);
                 if (!otherCollider) return;
+                
+
                 
                 // Handle enemy collisions
                 if (otherCollider.layer === 'Enemy') {
@@ -749,11 +754,8 @@
             }
             
             onCollisionExit(other) {
-                const otherCollider = other.getComponent(GameEngine.Collider);
-                if (otherCollider && otherCollider.layer === 'Platform') {
-                    // Mark as not grounded when leaving platform
-                    this.isGrounded = false;
-                }
+                // Call parent method to handle platform collision exit
+                super.onCollisionExit(other);
             }
         }
 
