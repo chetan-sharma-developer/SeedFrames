@@ -935,7 +935,7 @@
             
             enemy.addComponent(new EnemyAI(type, speed));
             
-            if (type !== 'jump') {
+            if (type === 'jump') {
                 enemy.addComponent(new GameEngine.Rigidbody());
             }
             
@@ -984,7 +984,7 @@
                 .at(gameState.playerStartX, gameState.playerStartY)
                 .withColor('#3498db', 24, 32)
                 .withCollider('box', 24, 32, false, 'Player')
-                .withRigidbody()
+                .withComponent(new GameEngine.Rigidbody())
                 .build();
             
             player.addComponent(new AdvancedPlatformerPlayer({
