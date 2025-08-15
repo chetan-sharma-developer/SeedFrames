@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Platformer - SeedFrames Engine</title>
+    <title>Enhanced SVG Platformer - SeedFrames Engine</title>
     <style>
         body {
             margin: 0;
@@ -110,6 +110,275 @@
 
     <script src="./seedframes.js"></script>
     <script>
+        // ==================== SVG ASSETS ====================
+        
+        // SVG Asset Manager for enhanced graphics
+        class SVGAssetManager {
+            constructor() {
+                this.assets = new Map();
+                this.loadAssets();
+            }
+            
+            loadAssets() {
+                // Player character SVG
+                this.assets.set('player', `
+                    <svg width="32" height="48" viewBox="0 0 32 48" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Body -->
+                        <rect x="8" y="16" width="16" height="24" rx="8" fill="#3498db" stroke="#2980b9" stroke-width="2"/>
+                        <!-- Head -->
+                        <circle cx="16" cy="12" r="8" fill="#f39c12" stroke="#e67e22" stroke-width="2"/>
+                        <!-- Eyes -->
+                        <circle cx="14" cy="10" r="2" fill="#2c3e50"/>
+                        <circle cx="18" cy="10" r="2" fill="#2c3e50"/>
+                        <!-- Arms -->
+                        <rect x="4" y="20" width="6" height="12" rx="3" fill="#3498db" stroke="#2980b9" stroke-width="1"/>
+                        <rect x="22" y="20" width="6" height="12" rx="3" fill="#3498db" stroke="#2980b9" stroke-width="1"/>
+                        <!-- Legs -->
+                        <rect x="10" y="38" width="4" height="8" rx="2" fill="#34495e" stroke="#2c3e50" stroke-width="1"/>
+                        <rect x="18" y="38" width="4" height="8" rx="2" fill="#34495e" stroke="#2c3e50" stroke-width="1"/>
+                    </svg>
+                `);
+                
+                // Enemy SVG
+                this.assets.set('enemy', `
+                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Body -->
+                        <rect x="4" y="4" width="16" height="16" rx="8" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
+                        <!-- Eyes -->
+                        <circle cx="9" cy="10" r="2" fill="#2c3e50"/>
+                        <circle cx="15" cy="10" r="2" fill="#2c3e50"/>
+                        <!-- Mouth -->
+                        <path d="M 8 16 Q 12 20 16 16" stroke="#2c3e50" stroke-width="2" fill="none"/>
+                        <!-- Spikes -->
+                        <polygon points="12,2 14,6 10,6" fill="#c0392b"/>
+                        <polygon points="12,22 14,18 10,18" fill="#c0392b"/>
+                        <polygon points="2,12 6,14 6,10" fill="#c0392b"/>
+                        <polygon points="22,12 18,14 18,10" fill="#c0392b"/>
+                    </svg>
+                `);
+                
+                // Platform SVG
+                this.assets.set('platform', `
+                    <svg width="200" height="40" viewBox="0 0 200 40" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Main platform -->
+                        <rect x="0" y="0" width="200" height="40" fill="#34495e" stroke="#2c3e50" stroke-width="2"/>
+                        <!-- Grass top -->
+                        <rect x="0" y="0" width="200" height="8" fill="#27ae60" stroke="#229954" stroke-width="1"/>
+                        <!-- Grass details -->
+                        <circle cx="20" cy="4" r="2" fill="#2ecc71"/>
+                        <circle cx="60" cy="6" r="1.5" fill="#2ecc71"/>
+                        <circle cx="100" cy="3" r="2.5" fill="#2ecc71"/>
+                        <circle cx="140" cy="5" r="1" fill="#2ecc71"/>
+                        <circle cx="180" cy="4" r="2" fill="#2ecc71"/>
+                        <!-- Wood texture -->
+                        <line x1="0" y1="12" x2="200" y2="12" stroke="#2c3e50" stroke-width="1"/>
+                        <line x1="0" y1="20" x2="200" y2="20" stroke="#2c3e50" stroke-width="1"/>
+                        <line x1="0" y1="28" x2="200" y2="28" stroke="#2c3e50" stroke-width="1"/>
+                        <line x1="0" y1="36" x2="200" y2="36" stroke="#2c3e50" stroke-width="1"/>
+                    </svg>
+                `);
+                
+                // Moving platform SVG
+                this.assets.set('moving-platform', `
+                    <svg width="100" height="60" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Main platform -->
+                        <rect x="0" y="0" width="100" height="60" fill="#9b59b6" stroke="#8e44ad" stroke-width="2"/>
+                        <!-- Magical glow -->
+                        <rect x="0" y="0" width="100" height="60" fill="url(#magicalGradient)" opacity="0.3"/>
+                        <!-- Crystals -->
+                        <polygon points="20,10 25,20 15,20" fill="#e74c3c"/>
+                        <polygon points="50,15 55,25 45,25" fill="#3498db"/>
+                        <polygon points="80,12 85,22 75,22" fill="#f1c40f"/>
+                        <!-- Gear mechanism -->
+                        <circle cx="20" cy="45" r="8" fill="#34495e" stroke="#2c3e50" stroke-width="2"/>
+                        <circle cx="80" cy="45" r="8" fill="#34495e" stroke="#2c3e50" stroke-width="2"/>
+                        <rect x="18" y="43" width="4" height="4" fill="#ecf0f1"/>
+                        <rect x="78" y="43" width="4" height="4" fill="#ecf0f1"/>
+                        
+                        <defs>
+                            <linearGradient id="magicalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#9b59b6;stop-opacity:1" />
+                                <stop offset="50%" style="stop-color:#e74c3c;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#3498db;stop-opacity:1" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                `);
+                
+                // Coin SVG
+                this.assets.set('coin', `
+                    <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Coin body -->
+                        <circle cx="10" cy="10" r="8" fill="#f1c40f" stroke="#f39c12" stroke-width="2"/>
+                        <!-- Inner design -->
+                        <circle cx="10" cy="10" r="4" fill="#f39c12"/>
+                        <!-- Dollar sign -->
+                        <text x="10" y="13" text-anchor="middle" font-size="6" font-weight="bold" fill="#ffffff">$</text>
+                        <!-- Shine effect -->
+                        <ellipse cx="7" cy="7" rx="2" ry="1" fill="#ffffff" opacity="0.8"/>
+                    </svg>
+                `);
+                
+                // Gem SVG
+                this.assets.set('gem', `
+                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Gem shape -->
+                        <polygon points="12,2 18,8 12,22 6,8" fill="#e74c3c" stroke="#c0392b" stroke-width="2"/>
+                        <!-- Inner facets -->
+                        <polygon points="12,4 16,8 12,20 8,8" fill="#ff6b6b"/>
+                        <polygon points="12,6 14,8 12,18 10,8" fill="#ff8e8e"/>
+                        <!-- Shine effect -->
+                        <polygon points="10,6 12,8 10,10" fill="#ffffff" opacity="0.6"/>
+                        <polygon points="14,6 16,8 14,10" fill="#ffffff" opacity="0.6"/>
+                    </svg>
+                `);
+                
+                // Hazard SVG
+                this.assets.set('hazard', `
+                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Spikes -->
+                        <polygon points="12,2 20,18 16,18 12,10 8,18 4,18" fill="#e74c3c" stroke="#c0392b" stroke-width="1"/>
+                        <!-- Base -->
+                        <rect x="8" y="18" width="8" height="6" fill="#34495e" stroke="#2c3e50" stroke-width="1"/>
+                        <!-- Warning stripes -->
+                        <rect x="10" y="20" width="4" height="2" fill="#f39c12"/>
+                        <rect x="10" y="22" width="4" height="2" fill="#e74c3c"/>
+                    </svg>
+                `);
+                
+                // Background elements
+                this.assets.set('tree', `
+                    <svg width="40" height="60" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Trunk -->
+                        <rect x="15" y="40" width="10" height="20" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+                        <!-- Leaves -->
+                        <circle cx="20" cy="25" r="15" fill="#228B22" stroke="#006400" stroke-width="2"/>
+                        <circle cx="15" cy="20" r="8" fill="#32CD32"/>
+                        <circle cx="25" cy="30" r="10" fill="#228B22"/>
+                        <!-- Highlights -->
+                        <circle cx="18" cy="22" r="3" fill="#90EE90" opacity="0.6"/>
+                    </svg>
+                `);
+                
+                this.assets.set('cloud', `
+                    <svg width="80" height="40" viewBox="0 0 80 40" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Cloud shape -->
+                        <ellipse cx="20" cy="20" rx="15" ry="12" fill="#ffffff" opacity="0.8"/>
+                        <ellipse cx="35" cy="15" rx="12" ry="10" fill="#ffffff" opacity="0.8"/>
+                        <ellipse cx="50" cy="20" rx="18" ry="14" fill="#ffffff" opacity="0.8"/>
+                        <ellipse cx="65" cy="18" rx="10" ry="8" fill="#ffffff" opacity="0.8"/>
+                        <!-- Shading -->
+                        <ellipse cx="25" cy="18" rx="8" ry="6" fill="#f0f0f0" opacity="0.5"/>
+                    </svg>
+                `);
+                
+                this.assets.set('mountain', `
+                    <svg width="120" height="80" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Mountain peaks -->
+                        <polygon points="0,80 30,40 60,60 90,20 120,80" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+                        <!-- Snow caps -->
+                        <polygon points="25,45 30,40 35,45" fill="#ffffff"/>
+                        <polygon points="85,25 90,20 95,25" fill="#ffffff"/>
+                        <!-- Shading -->
+                        <polygon points="0,80 30,40 30,80" fill="#654321" opacity="0.3"/>
+                        <polygon points="90,20 120,80 90,80" fill="#654321" opacity="0.3"/>
+                    </svg>
+                `);
+                
+                // Additional decorative elements
+                this.assets.set('flower', `
+                    <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Petals -->
+                        <circle cx="8" cy="8" r="6" fill="#ff69b4" stroke="#ff1493" stroke-width="1"/>
+                        <circle cx="8" cy="8" r="4" fill="#ffb6c1"/>
+                        <!-- Center -->
+                        <circle cx="8" cy="8" r="2" fill="#ffff00"/>
+                        <!-- Stem -->
+                        <line x1="8" y1="14" x2="8" y2="16" stroke="#228b22" stroke-width="2"/>
+                    </svg>
+                `);
+                
+                this.assets.set('bush', `
+                    <svg width="24" height="16" viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Bush shape -->
+                        <ellipse cx="12" cy="8" rx="10" ry="6" fill="#228b22" stroke="#006400" stroke-width="1"/>
+                        <ellipse cx="8" cy="6" rx="4" ry="3" fill="#32cd32"/>
+                        <ellipse cx="16" cy="6" rx="4" ry="3" fill="#32cd32"/>
+                        <ellipse cx="12" cy="4" rx="3" ry="2" fill="#90ee90"/>
+                    </svg>
+                `);
+            }
+            
+            getAsset(name) {
+                return this.assets.get(name) || '';
+            }
+            
+            createImageFromSVG(svgString, width, height) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                
+                const img = new Image();
+                const svgBlob = new Blob([svgString], {type: 'image/svg+xml'});
+                const url = URL.createObjectURL(svgBlob);
+                
+                return new Promise((resolve) => {
+                    img.onload = () => {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        URL.revokeObjectURL(url);
+                        resolve(canvas);
+                    };
+                    img.src = url;
+                });
+            }
+        }
+        
+        // Enhanced SVG Sprite Renderer
+        class SVGSpriteRenderer extends GameEngine.SpriteRenderer {
+            constructor(svgAsset, width, height, config = {}) {
+                super(config);
+                this.svgAsset = svgAsset;
+                this.width = width;
+                this.height = height;
+                this.svgManager = new SVGAssetManager();
+                this.canvas = null;
+                this.loadSVG();
+            }
+            
+            async loadSVG() {
+                const svgString = this.svgManager.getAsset(this.svgAsset);
+                if (svgString) {
+                    this.canvas = await this.svgManager.createImageFromSVG(svgString, this.width, this.height);
+                }
+            }
+            
+            draw(ctx) {
+                if (!this.canvas || !this.enabled) return;
+                
+                ctx.save();
+                
+                // Apply transformations
+                if (this.gameObject && this.gameObject.transform) {
+                    const pos = this.gameObject.transform.position;
+                    ctx.translate(pos.x, pos.y);
+                    ctx.rotate(this.gameObject.transform.rotation);
+                    ctx.scale(this.gameObject.transform.scale.x, this.gameObject.transform.scale.y);
+                }
+                
+                // Apply alpha
+                ctx.globalAlpha = this.alpha;
+                
+                // Draw the SVG canvas
+                ctx.drawImage(this.canvas, -this.width / 2, -this.height / 2, this.width, this.height);
+                
+                ctx.restore();
+            }
+        }
+        
+        // Global SVG asset manager
+        const svgAssetManager = new SVGAssetManager();
+
         // ==================== GAME STATE ====================
         let gameState = {
             score: 0,
@@ -830,7 +1099,54 @@
             }
         }
         
+        function createBackgroundElements() {
+            // Create background elements for visual appeal
+            const backgroundElements = [
+                { type: 'mountain', x: 50, y: 400, scale: 0.8 },
+                { type: 'mountain', x: 300, y: 380, scale: 0.6 },
+                { type: 'mountain', x: 600, y: 420, scale: 0.7 },
+                { type: 'tree', x: 150, y: 480, scale: 0.9 },
+                { type: 'tree', x: 450, y: 500, scale: 0.8 },
+                { type: 'tree', x: 750, y: 490, scale: 0.7 },
+                { type: 'cloud', x: 100, y: 100, scale: 0.6 },
+                { type: 'cloud', x: 400, y: 80, scale: 0.8 },
+                { type: 'cloud', x: 700, y: 120, scale: 0.5 },
+                // Add decorative elements
+                { type: 'bush', x: 200, y: 520, scale: 0.7 },
+                { type: 'bush', x: 500, y: 530, scale: 0.6 },
+                { type: 'flower', x: 250, y: 540, scale: 0.8 },
+                { type: 'flower', x: 550, y: 545, scale: 0.7 },
+                { type: 'flower', x: 800, y: 535, scale: 0.9 }
+            ];
+            
+            backgroundElements.forEach(element => {
+                const bgElement = gameScene.createGameObject(`Background_${element.type}_${element.x}`)
+                    .at(element.x, element.y)
+                    .build();
+                
+                const svgRenderer = new SVGSpriteRenderer(element.type, 
+                    element.type === 'mountain' ? 120 * element.scale : 
+                    element.type === 'tree' ? 40 * element.scale : 
+                    element.type === 'cloud' ? 80 * element.scale :
+                    element.type === 'bush' ? 24 * element.scale :
+                    element.type === 'flower' ? 16 * element.scale : 80 * element.scale,
+                    element.type === 'mountain' ? 80 * element.scale : 
+                    element.type === 'tree' ? 60 * element.scale : 
+                    element.type === 'cloud' ? 40 * element.scale :
+                    element.type === 'bush' ? 16 * element.scale :
+                    element.type === 'flower' ? 16 * element.scale : 40 * element.scale
+                );
+                bgElement.addComponent(svgRenderer);
+                
+                // Set background layer
+                svgRenderer.layer = -1; // Background layer
+            });
+        }
+        
         function createLevel1() {
+            // Add background elements
+            createBackgroundElements();
+            
             // Ground platforms
             createPlatform(0, 550, 1000, 50, '#2c3e50');
             createPlatform(200, 450, 200, 20, '#34495e');
@@ -855,6 +1171,9 @@
         }
         
         function createLevel2() {
+            // Add background elements
+            createBackgroundElements();
+            
             // More complex platform layout
             createPlatform(0, 550, 200, 50, '#2c3e50');
             createPlatform(300, 550, 200, 50, '#2c3e50');
@@ -893,6 +1212,9 @@
         }
         
         function createLevel3() {
+            // Add background elements
+            createBackgroundElements();
+            
             // Challenge level with complex layout
             createPlatform(0, 550, 150, 50, '#2c3e50');
             createPlatform(250, 550, 150, 50, '#2c3e50');
@@ -938,14 +1260,17 @@
             createCollectible(330, 170, 100, 'gem');
         }
 
-        // ==================== GAME OBJECT CREATION FUNCTIONS ====================
+        // ==================== ENHANCED GAME OBJECT CREATION FUNCTIONS ====================
         
         function createPlatform(x, y, width, height, color = '#34495e') {
             const platform = gameScene.createGameObject(`Platform_${x}_${y}`)
                 .at(x, y)
-                .withColor(color, width, height)
                 .withCollider('box', width, height, false, 'Platform')
                 .build();
+            
+            // Add SVG sprite renderer
+            const svgRenderer = new SVGSpriteRenderer('platform', width, height);
+            platform.addComponent(svgRenderer);
             
             // Ensure platform doesn't have a Rigidbody (should be static)
             const rigidbody = platform.getComponent(GameEngine.Rigidbody);
@@ -960,9 +1285,12 @@
         function createMovingPlatform(x, y, width, height, direction = 'horizontal') {
             const platform = gameScene.createGameObject(`MovingPlatform_${x}_${y}`)
                 .at(x, y)
-                .withColor('#9b59b6', width, height)
                 .withCollider('box', width, height, false, 'Platform')
                 .build();
+            
+            // Add SVG sprite renderer for moving platform
+            const svgRenderer = new SVGSpriteRenderer('moving-platform', width, height);
+            platform.addComponent(svgRenderer);
             
             // Ensure moving platform doesn't have a Rigidbody (should be kinematic)
             const rigidbody = platform.getComponent(GameEngine.Rigidbody);
@@ -982,7 +1310,6 @@
                 // Jumping enemies need physics for gravity
                 enemy = gameScene.createGameObject(`Enemy_${x}_${y}`)
                     .at(x, y)
-                    .withColor('#e74c3c', 24, 24)
                     .withCollider('box', 24, 24, false, 'Enemy')
                     .withDynamicBody(0.8, 1.0)
                     .build();
@@ -990,10 +1317,13 @@
                 // Patrol and chase enemies move via script, no physics needed
                 enemy = gameScene.createGameObject(`Enemy_${x}_${y}`)
                     .at(x, y)
-                    .withColor('#e74c3c', 24, 24)
                     .withCollider('box', 24, 24, false, 'Enemy')
                     .build();
             }
+            
+            // Add SVG sprite renderer for enemy
+            const svgRenderer = new SVGSpriteRenderer('enemy', 24, 24);
+            enemy.addComponent(svgRenderer);
             
             enemy.addComponent(new EnemyAI(type, speed));
             enemies.push(enemy);
@@ -1001,24 +1331,30 @@
         }
         
         function createCollectible(x, y, value = 50, type = 'coin') {
-            const size = type === 'gem' ? 20 : 16;
+            const size = type === 'gem' ? 24 : 20;
             const collectible = gameScene.createGameObject(`Collectible_${x}_${y}`)
                 .at(x, y)
-                .withColor('#f1c40f', size, size)
                 .withCollider('box', size, size, true, 'Collectible')
                 .build();
+            
+            // Add SVG sprite renderer for collectible
+            const svgRenderer = new SVGSpriteRenderer(type, size, size);
+            collectible.addComponent(svgRenderer);
             
             collectible.addComponent(new Collectible(value, type));
             collectibles.push(collectible);
             return collectible;
         }
         
-        function createHazard(x, y, width = 20, height = 20) {
+        function createHazard(x, y, width = 24, height = 24) {
             const hazard = gameScene.createGameObject(`Hazard_${x}_${y}`)
                 .at(x, y)
-                .withColor('#ff0000', width, height)
                 .withCollider('box', width, height, true, 'Hazard')
                 .build();
+            
+            // Add SVG sprite renderer for hazard
+            const svgRenderer = new SVGSpriteRenderer('hazard', width, height);
+            hazard.addComponent(svgRenderer);
             
             // Add damage component
             hazard.addComponent(new class extends GameEngine.Component {
@@ -1076,48 +1412,37 @@
         
         function createCollectEffect(position, type) {
             const color = type === 'gem' ? '#ff00ff' : '#ffff00';
-            for (let i = 0; i < 6; i++) {
+            for (let i = 0; i < 8; i++) {
                 const particle = gameScene.createGameObject(`CollectParticle_${Date.now()}_${i}`)
                     .at(position.x, position.y)
-                    .withColor(color, 2, 2)
                     .build();
+                
+                // Create sparkle particle
+                const sparkleSVG = `
+                    <svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="3,0 3.5,2.5 6,3 3.5,3.5 3,6 2.5,3.5 0,3 2.5,2.5" fill="${color}" stroke="#ffffff" stroke-width="0.3"/>
+                    </svg>
+                `;
+                
+                const svgRenderer = new SVGSpriteRenderer('sparkle', 6, 6);
+                svgRenderer.svgAsset = sparkleSVG;
+                svgRenderer.loadSVG = async function() {
+                    this.canvas = await this.svgManager.createImageFromSVG(sparkleSVG, 6, 6);
+                };
+                svgRenderer.loadSVG();
+                
+                particle.addComponent(svgRenderer);
                 
                 const rigidbody = particle.getComponent(GameEngine.Rigidbody);
                 if (rigidbody) {
-                    const angle = (i / 6) * Math.PI * 2;
+                    const angle = (i / 8) * Math.PI * 2;
                     rigidbody.velocity = new GameEngine.Vector2(
-                        Math.cos(angle) * 100,
-                        Math.sin(angle) * 100
+                        Math.cos(angle) * 120,
+                        Math.sin(angle) * 120
                     );
                 }
                 
-                // Auto-destroy after 0.8 seconds
-                setTimeout(() => {
-                    if (particle && particle.destroy) {
-                        particle.destroy();
-                    }
-                }, 800);
-                
-                particles.push(particle);
-            }
-        }
-        
-        function createJumpParticles(position) {
-            for (let i = 0; i < 5; i++) {
-                const particle = gameScene.createGameObject(`Particle_${Date.now()}_${i}`)
-                    .at(position.x + (Math.random() - 0.5) * 20, position.y + 10)
-                    .withColor('#ffffff', 3, 3)
-                    .build();
-                
-                const rigidbody = particle.getComponent(GameEngine.Rigidbody);
-                if (rigidbody) {
-                    rigidbody.velocity = new GameEngine.Vector2(
-                        (Math.random() - 0.5) * 100,
-                        -Math.random() * 200
-                    );
-                }
-                
-                // Auto-destroy after 1 second
+                // Auto-destroy after 1.0 seconds
                 setTimeout(() => {
                     if (particle && particle.destroy) {
                         particle.destroy();
@@ -1128,53 +1453,125 @@
             }
         }
         
-        function createDashParticles(position) {
+        function createJumpParticles(position) {
             for (let i = 0; i < 8; i++) {
-                const particle = gameScene.createGameObject(`DashParticle_${Date.now()}_${i}`)
-                    .at(position.x + (Math.random() - 0.5) * 30, position.y + (Math.random() - 0.5) * 20)
-                    .withColor('#00ffff', 2, 2)
+                const particle = gameScene.createGameObject(`JumpParticle_${Date.now()}_${i}`)
+                    .at(position.x + (Math.random() - 0.5) * 20, position.y + 10)
                     .build();
+                
+                // Create star-shaped particle
+                const starSVG = `
+                    <svg width="8" height="8" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="4,0 5,3 8,4 5,5 4,8 3,5 0,4 3,3" fill="#ffffff" stroke="#f0f0f0" stroke-width="0.5"/>
+                    </svg>
+                `;
+                
+                const svgRenderer = new SVGSpriteRenderer('star', 8, 8);
+                svgRenderer.svgAsset = starSVG;
+                svgRenderer.loadSVG = async function() {
+                    this.canvas = await this.svgManager.createImageFromSVG(starSVG, 8, 8);
+                };
+                svgRenderer.loadSVG();
+                
+                particle.addComponent(svgRenderer);
                 
                 const rigidbody = particle.getComponent(GameEngine.Rigidbody);
                 if (rigidbody) {
                     rigidbody.velocity = new GameEngine.Vector2(
                         (Math.random() - 0.5) * 150,
-                        (Math.random() - 0.5) * 150
+                        -Math.random() * 250
                     );
                 }
                 
-                // Auto-destroy after 0.5 seconds
+                // Auto-destroy after 1.2 seconds
                 setTimeout(() => {
                     if (particle && particle.destroy) {
                         particle.destroy();
                     }
-                }, 500);
+                }, 1200);
+                
+                particles.push(particle);
+            }
+        }
+        
+        function createDashParticles(position) {
+            for (let i = 0; i < 12; i++) {
+                const particle = gameScene.createGameObject(`DashParticle_${Date.now()}_${i}`)
+                    .at(position.x + (Math.random() - 0.5) * 30, position.y + (Math.random() - 0.5) * 20)
+                    .build();
+                
+                // Create lightning bolt particle
+                const lightningSVG = `
+                    <svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="3,0 2,2 4,3 2,4 3,6 4,4 2,3" fill="#00ffff" stroke="#0080ff" stroke-width="0.5"/>
+                    </svg>
+                `;
+                
+                const svgRenderer = new SVGSpriteRenderer('lightning', 6, 6);
+                svgRenderer.svgAsset = lightningSVG;
+                svgRenderer.loadSVG = async function() {
+                    this.canvas = await this.svgManager.createImageFromSVG(lightningSVG, 6, 6);
+                };
+                svgRenderer.loadSVG();
+                
+                particle.addComponent(svgRenderer);
+                
+                const rigidbody = particle.getComponent(GameEngine.Rigidbody);
+                if (rigidbody) {
+                    rigidbody.velocity = new GameEngine.Vector2(
+                        (Math.random() - 0.5) * 200,
+                        (Math.random() - 0.5) * 200
+                    );
+                }
+                
+                // Auto-destroy after 0.6 seconds
+                setTimeout(() => {
+                    if (particle && particle.destroy) {
+                        particle.destroy();
+                    }
+                }, 600);
                 
                 particles.push(particle);
             }
         }
         
         function createExplosionParticles(position) {
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 15; i++) {
                 const particle = gameScene.createGameObject(`ExplosionParticle_${Date.now()}_${i}`)
                     .at(position.x + (Math.random() - 0.5) * 40, position.y + (Math.random() - 0.5) * 40)
-                    .withColor('#ff4444', 4, 4)
                     .build();
+                
+                // Create fire particle
+                const fireSVG = `
+                    <svg width="8" height="8" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="4,0 6,4 4,8 2,4" fill="#ff4444" stroke="#cc0000" stroke-width="0.5"/>
+                        <polygon points="4,1 5,4 4,7 3,4" fill="#ff6666"/>
+                    </svg>
+                `;
+                
+                const svgRenderer = new SVGSpriteRenderer('fire', 8, 8);
+                svgRenderer.svgAsset = fireSVG;
+                svgRenderer.loadSVG = async function() {
+                    this.canvas = await this.svgManager.createImageFromSVG(fireSVG, 8, 8);
+                };
+                svgRenderer.loadSVG();
+                
+                particle.addComponent(svgRenderer);
                 
                 const rigidbody = particle.getComponent(GameEngine.Rigidbody);
                 if (rigidbody) {
                     rigidbody.velocity = new GameEngine.Vector2(
-                        (Math.random() - 0.5) * 300,
-                        (Math.random() - 0.5) * 300
+                        (Math.random() - 0.5) * 350,
+                        (Math.random() - 0.5) * 350
                     );
                 }
                 
-                // Auto-destroy after 1.5 seconds
+                // Auto-destroy after 1.8 seconds
                 setTimeout(() => {
                     if (particle && particle.destroy) {
                         particle.destroy();
                     }
-                }, 1500);
+                }, 1800);
                 
                 particles.push(particle);
             }
@@ -1185,10 +1582,13 @@
         function createPlayer() {
             player = gameScene.createGameObject('Player')
                 .at(gameState.playerStartX, gameState.playerStartY)
-                .withColor('#3498db', 24, 32)
-                .withCollider('box', 24, 32, false, 'Player')
+                .withCollider('box', 32, 48, false, 'Player')
                 .withDynamicBody(1.0, 1.0)
                 .build();
+            
+            // Add SVG sprite renderer for player
+            const svgRenderer = new SVGSpriteRenderer('player', 32, 48);
+            player.addComponent(svgRenderer);
             
             // Configure the Rigidbody for better platformer physics
             const rigidbody = player.getComponent(GameEngine.Rigidbody);
