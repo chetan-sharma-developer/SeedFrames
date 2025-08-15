@@ -3621,6 +3621,44 @@ class AssetManager {
     this.createPlaceholderAssets();
   }
   
+  createPlaceholderAssets() {
+    // Create a simple colored rectangle as placeholder image
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    
+    // Create a magenta/pink placeholder
+    ctx.fillStyle = '#ff00ff';
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('?', 16, 20);
+    
+    const placeholderImage = new Image();
+    placeholderImage.src = canvas.toDataURL();
+    this.placeholderAssets.set('image', placeholderImage);
+    
+    // Create a silent audio placeholder
+    const audioContext = new (window.AudioContext || window.webkitAudioContext || function(){})();
+    if (audioContext.createBuffer) {
+      try {
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const placeholderAudio = document.createElement('audio');
+        this.placeholderAssets.set('audio', placeholderAudio);
+      } catch (e) {
+        // Fallback for environments without audio support
+        const placeholderAudio = document.createElement('audio');
+        this.placeholderAssets.set('audio', placeholderAudio);
+      }
+    } else {
+      // Simple fallback
+      const placeholderAudio = document.createElement('audio');
+      this.placeholderAssets.set('audio', placeholderAudio);
+    }
+  }
+  
   // Register a batch of assets by name
   async registerAssets(assets = {}) {
     const tasks = [];
