@@ -4650,9 +4650,7 @@ if (typeof module !== "undefined" && module.exports) {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
 }
 
@@ -4690,9 +4688,7 @@ if (typeof window !== "undefined") {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
 }
 
@@ -4810,9 +4806,7 @@ if (typeof window !== "undefined" && !window.GameEngine) {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
 }
 
@@ -4867,9 +4861,7 @@ if (typeof window !== "undefined") {
     Particle,
     ParticleEmitter,
     Timer,
-    TimerManager,
-    // Helpers
-    SVG,
+    TimerManager
   };
   
   // Merge with existing GameEngine

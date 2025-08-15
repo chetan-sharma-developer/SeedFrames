@@ -94,6 +94,13 @@
         <div id="instructions">
             Arrow Keys: Move | Spacebar: Jump | X: Double Jump | Z: Dash | R: Restart | M: Toggle Sound
         </div>
+        
+        <div id="start-prompt" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                      background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 10px; 
+                                      text-align: center; display: none; z-index: 300;">
+            <h3>Click to Start Game</h3>
+            <p>Audio will be enabled after clicking</p>
+        </div>
     </div>
 
     <script src="./seedframes.js"></script>
@@ -120,9 +127,17 @@
             }
 
             initAudio() {
+                // Delay audio context creation until user interaction
+                this.enabled = true;
+            }
+            
+            createAudioContext() {
+                if (this.context) return;
+                
                 try {
                     this.context = new (window.AudioContext || window.webkitAudioContext)();
                     this.createSounds();
+                    console.log('Audio system initialized');
                 } catch (e) {
                     console.warn('Web Audio API not supported');
                     this.enabled = false;
@@ -209,7 +224,14 @@
             }
 
             play(soundName) {
-                if (this.sounds[soundName] && this.enabled) {
+                if (!this.enabled) return;
+                
+                // Create audio context on first play (user interaction)
+                if (!this.context) {
+                    this.createAudioContext();
+                }
+                
+                if (this.sounds[soundName] && this.context) {
                     this.sounds[soundName]();
                 }
             }
@@ -1017,33 +1039,62 @@
         // ==================== INITIALIZATION ====================
         
         function initializeGame() {
-            // Create player
-            createPlayer();
-            
-            // Setup systems
-            setupPhysics();
-            setupCamera();
-            setupInputHandling();
-            
-            // Create first level
-            createLevel(1);
-            
-            // Update UI
-            updateUI();
-            
-            // Add scene to manager and start
-            engine.sceneManager.add('game', gameScene);
-            engine.sceneManager.load('game');
-            engine.start();
-            
-            console.log('Advanced Platformer Game Initialized!');
-            console.log('Controls: Arrow Keys = Move, Spacebar = Jump, X = Double Jump, Z = Dash');
-            console.log('Additional: R = Restart, P = Pause, D = Debug Mode, M = Toggle Sound');
+            try {
+                // Show start prompt
+                document.getElementById('start-prompt').style.display = 'block';
+                
+                // Wait for user interaction
+                document.addEventListener('click', function startGame() {
+                    document.getElementById('start-prompt').style.display = 'none';
+                    document.removeEventListener('click', startGame);
+                    
+                    // Initialize audio context on user interaction
+                    audioManager.createAudioContext();
+                    
+                    // Create player
+                    createPlayer();
+                    
+                    // Setup systems
+                    setupPhysics();
+                    setupCamera();
+                    setupInputHandling();
+                    
+                    // Create first level
+                    createLevel(1);
+                    
+                    // Update UI
+                    updateUI();
+                    
+                    // Add scene to manager and start
+                    engine.sceneManager.add('game', gameScene);
+                    engine.sceneManager.load('game');
+                    engine.start();
+                    
+                    console.log('Advanced Platformer Game Initialized!');
+                    console.log('Controls: Arrow Keys = Move, Spacebar = Jump, X = Double Jump, Z = Dash');
+                    console.log('Additional: R = Restart, P = Pause, D = Debug Mode, M = Toggle Sound');
+                }, { once: true });
+                
+            } catch (error) {
+                console.error('Error initializing game:', error);
+                document.getElementById('start-prompt').innerHTML = '<h3>Error Loading Game</h3><p>Check console for details</p>';
+            }
         }
 
         // Start the game when page loads
+        function waitForGameEngine() {
+            if (typeof GameEngine !== 'undefined' && GameEngine.SeedFrames) {
+                console.log('GameEngine loaded successfully');
+                console.log('Available components:', Object.keys(GameEngine));
+                initializeGame();
+            } else {
+                console.log('Waiting for GameEngine to load...', typeof GameEngine);
+                setTimeout(waitForGameEngine, 100);
+            }
+        }
+        
         window.addEventListener('load', () => {
-            setTimeout(initializeGame, 100);
+            setTimeout(waitForGameEngine, 100);
         });
 
         // Global restart function for button
